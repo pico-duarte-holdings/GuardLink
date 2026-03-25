@@ -251,13 +251,14 @@ const Navbar = ({ onDashboardClick }: { onDashboardClick: () => void }) => {
         </div>
 
         {/* Mobile Actions */}
-        <div className="flex items-center gap-2 lg:hidden">
+        <div className="flex items-center gap-4 lg:hidden">
           <button 
             onClick={onDashboardClick} 
-            className="text-zinc-400 hover:text-army-gold p-2 transition-colors flex items-center justify-center"
+            className="text-[10px] text-zinc-400 hover:text-army-gold transition-colors uppercase font-black font-mono flex items-center gap-1.5"
             aria-label="Admin Login"
           >
-            <Lock className="w-5 h-5" />
+            <Lock className="w-3.5 h-3.5" />
+            Admin
           </button>
           <button className="text-white p-2 hover:bg-white/5 transition-colors" onClick={() => setIsOpen(!isOpen)}>
             {isOpen ? <X className="w-6 h-6 text-army-gold" /> : <Menu className="w-6 h-6" />}
@@ -1528,7 +1529,7 @@ export const LandingPage = ({ onDashboardClick }: { onDashboardClick: () => void
           className="text-center z-10"
         >
           <div className="w-24 h-24 border-4 border-army-gold/20 border-t-army-gold rounded-full animate-spin mb-8 mx-auto glow-border" />
-          <h2 className="text-2xl font-black uppercase tracking-[0.5em] glow-text animate-pulse">Initializing_System</h2>
+          <h2 className="text-lg md:text-2xl font-black uppercase tracking-[0.2em] md:tracking-[0.5em] text-army-gold glow-text animate-pulse">Initializing_Dashboard</h2>
           <div className="mt-4 font-mono text-[10px] text-zinc-500 space-y-1">
             <p>{">"} Loading_Assets...</p>
             <p>{">"} Establishing_Secure_Link...</p>

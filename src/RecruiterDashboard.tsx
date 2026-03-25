@@ -794,49 +794,49 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
             </motion.div>
           )}
 
-          <div className="overflow-x-auto">
-            {selectedEmails.size > 0 && (
-              <motion.div 
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                className="bg-army-gold p-3 flex items-center justify-between gap-4 sticky left-0 z-20"
-              >
-                <div className="flex items-center gap-4">
-                  <span className="text-army-black font-black uppercase text-[10px] tracking-widest">
-                    {selectedEmails.size} Selected_Records
-                  </span>
-                  <div className="h-4 w-px bg-army-black/20" />
-                  <div className="flex items-center gap-2">
-                    <span className="text-army-black font-black uppercase text-[8px] tracking-tighter">Bulk_Status:</span>
-                    {['New', 'Contacted', 'Qualified', 'Scheduled'].map(status => (
-                      <button 
-                        key={status}
-                        onClick={() => handleBulkStatusUpdate(status)}
-                        className="bg-army-black/10 hover:bg-army-black/20 px-2 py-1 text-[8px] font-black uppercase border border-army-black/20 text-army-black transition-colors"
-                      >
-                        {status}
-                      </button>
-                    ))}
-                  </div>
+          {selectedEmails.size > 0 && (
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="bg-army-gold p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sticky left-0 z-20"
+            >
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                <span className="text-army-black font-black uppercase text-[10px] tracking-widest">
+                  {selectedEmails.size} Selected_Records
+                </span>
+                <div className="hidden sm:block h-4 w-px bg-army-black/20" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-army-black font-black uppercase text-[8px] tracking-tighter">Bulk_Status:</span>
+                  {['New', 'Contacted', 'Qualified', 'Scheduled'].map(status => (
+                    <button 
+                      key={status}
+                      onClick={() => handleBulkStatusUpdate(status)}
+                      className="bg-army-black/10 hover:bg-army-black/20 px-2 py-1 text-[8px] font-black uppercase border border-army-black/20 text-army-black transition-colors"
+                    >
+                      {status}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => exportToCSV(leads.filter(l => selectedEmails.has(l.email)))}
-                    className="flex items-center gap-1 bg-army-black text-army-gold px-3 py-1 text-[8px] font-black uppercase hover:bg-zinc-900 transition-colors"
-                  >
-                    <Download className="w-3 h-3" />
-                    Export_Selected
-                  </button>
-                  <button 
-                    onClick={() => setSelectedEmails(new Set())}
-                    className="text-army-black/60 hover:text-army-black font-black uppercase text-[8px] tracking-widest px-2"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          <div className="overflow-x-auto">
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button 
+                  onClick={() => exportToCSV(leads.filter(l => selectedEmails.has(l.email)))}
+                  className="flex items-center gap-1 bg-army-black text-army-gold px-3 py-1 text-[8px] font-black uppercase hover:bg-zinc-900 transition-colors"
+                >
+                  <Download className="w-3 h-3" />
+                  Export
+                </button>
+                <button 
+                  onClick={() => setSelectedEmails(new Set())}
+                  className="text-army-black/60 hover:text-army-black font-black uppercase text-[8px] tracking-widest px-2"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          <div className="overflow-x-auto w-full">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-army-gold/5 text-zinc-500 text-[8px] md:text-[10px] font-black uppercase tracking-widest">
@@ -1033,7 +1033,6 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
                 )}
               </tbody>
             </table>
-          </div>
           </div>
         </div>
       </main>
