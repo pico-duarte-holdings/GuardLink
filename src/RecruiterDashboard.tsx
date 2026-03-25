@@ -45,7 +45,7 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { onSnapshot, collection, query, orderBy, updateDoc, doc, where, getDoc, setDoc } from 'firebase/firestore';
-import { signInWithRedirect, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from './firebase';
 import { Lead, Subscription } from './types';
 import { cn } from './lib/utils';
@@ -323,7 +323,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   const handleGoogleSignIn = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
+      await signInWithPopup(auth, provider);
     } catch (err) {
       console.error("Sign in error:", err);
       setError("Failed to authenticate with Google");
@@ -425,7 +425,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
     document.body.removeChild(link);
   };
 
-  if (!isAuthenticated || !isFirebaseAuthenticated || userRole === 'pending') {
+  if (!isAuthenticated || !isFirebaseAuthenticated || !userRole || userRole === 'pending') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-army-black p-4 relative overflow-hidden">
         <div className="scanline" />
@@ -479,6 +479,15 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
                       <LogIn className="w-4 h-4" />
                       Sign In with Google
                     </button>
+                  </div>
+                )}
+
+                {isAuthenticated && isFirebaseAuthenticated && !userRole && (
+                  <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                    <Loader2 className="w-8 h-8 text-army-gold animate-spin" />
+                    <p className="text-army-gold text-[10px] font-mono uppercase tracking-widest animate-pulse">
+                      Verifying_Clearance...
+                    </p>
                   </div>
                 )}
               </>
