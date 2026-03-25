@@ -1,0 +1,114 @@
+/*
+Copyright 2026 Pico Duarte Holdings LLC. All rights reserved.
+This code, design, and associated assets may not be reproduced, distributed, or transmitted in any form or by any means without prior written permission.
+*/
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: leads
+    // Document ID: auto-generated
+    // Fields:
+    //   - timestamp: string (required, ISO 8601)
+    //   - firstName: string (required)
+    //   - lastName: string (required)
+    //   - email: string (required, email format)
+    //   - phone: string (required)
+    //   - age: string (optional)
+    //   - education: string (optional)
+    //   - interest: string (optional)
+    //   - message: string (optional)
+    //   - status: string (required, enum: ["New", "Contacted", "Qualified", "Scheduled"])
+    //   - source: string (optional)
+    //   - mos: string (optional)
+    //   - recruiterId: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          ((request.auth.token.email == "angellantigua98@gmail.com" || request.auth.token.email == "AngelLantigua98@gmail.com") && request.auth.token.email_verified == true));
+    }
+
+    function isAssignedRecruiter(data) {
+      return isAuthenticated() && data.recruiterId == request.auth.uid;
+    }
+
+    function isValidLead(data) {
+      return data.keys().hasAll(['timestamp', 'firstName', 'lastName', 'email', 'phone', 'status']) &&
+             data.firstName is string && data.firstName.size() > 0 && data.firstName.size() < 100 &&
+             data.lastName is string && data.lastName.size() > 0 && data.lastName.size() < 100 &&
+             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$") &&
+             data.status in ["New", "Contacted", "Qualified", "Scheduled"] &&
+             (!('interactions' in data) || data.interactions is list);
+    }
+
+    function isValidSubscription(data) {
+      return data.keys().hasAll(['timestamp', 'name', 'email', 'phone', 'optIn']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$") &&
+             data.optIn is bool;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /leads/{leadId} {
+      // Anyone can submit a lead (create)
+      allow create: if isValidLead(request.resource.data);
+      
+      // Admins can read/update/delete all. Recruiters can read/update their own leads.
+      allow read: if isAdmin() || isAssignedRecruiter(resource.data);
+      allow update: if isAdmin() || (isAssignedRecruiter(resource.data) && isAssignedRecruiter(request.resource.data) && isValidLead(request.resource.data));
+      allow delete: if isAdmin();
+    }
+
+    match /subscriptions/{subId} {
+      // Anyone can subscribe (create)
+      allow create: if isValidSubscription(request.resource.data);
+      
+      // Admins can read/update/delete all. Recruiters can read/update their own subscriptions.
+      allow read: if isAdmin() || isAssignedRecruiter(resource.data);
+      allow update: if isAdmin() || (isAssignedRecruiter(resource.data) && isAssignedRecruiter(request.resource.data) && isValidSubscription(request.resource.data));
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      // Users can read their own profile, admins can read all
+      allow read: if (isAuthenticated() && request.auth.uid == userId) || isAdmin();
+      
+      // Users can create their own profile with role 'pending', or with their pre-approved role
+      allow create: if (isAuthenticated() && request.auth.uid == userId && 
+                    request.resource.data.uid == userId &&
+                    (
+                      (!('role' in request.resource.data) || request.resource.data.role == 'pending') ||
+                      ('email' in request.auth.token && exists(/databases/$(database)/documents/pre_approved_users/$(request.auth.token.email.lower())) &&
+                       get(/databases/$(database)/documents/pre_approved_users/$(request.auth.token.email.lower())).data.role == request.resource.data.role &&
+                       (!('slug' in request.resource.data) || request.resource.data.slug == get(/databases/$(database)/documents/pre_approved_users/$(request.auth.token.email.lower())).data.slug))
+                    )) || isAdmin();
+                    
+      // Only admins can update user roles
+      allow update, delete: if isAdmin();
+    }
+
+    match /pre_approved_users/{email} {
+      // Admins can manage pre-approved users
+      allow read, write: if isAdmin();
+      // Users can read their own pre-approval
+      allow read: if isAuthenticated() && request.auth.token.email == email;
+    }
+  }
+}

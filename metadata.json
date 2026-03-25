@@ -1,0 +1,7 @@
+{
+  "name": "GuardLink",
+  "description": "Florida Army National Guard Recruiting & Lead Management Platform",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
