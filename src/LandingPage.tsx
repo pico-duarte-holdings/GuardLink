@@ -123,7 +123,7 @@ const AIChat = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) =
           initial={{ opacity: 0, y: 100, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 100, scale: 0.9 }}
-          className="fixed bottom-20 right-4 md:bottom-28 md:right-8 w-[calc(100%-2rem)] md:w-[350px] h-[500px] bg-army-black/95 backdrop-blur-xl hud-border z-50 flex flex-col overflow-hidden shadow-2xl"
+          className="!fixed bottom-20 right-4 md:bottom-28 md:right-8 w-[calc(100%-2rem)] md:w-[350px] h-[500px] bg-army-black/95 backdrop-blur-xl hud-border z-50 flex flex-col overflow-hidden shadow-2xl"
         >
           <div className="p-4 border-b border-army-gold/20 bg-army-gold/10 flex justify-between items-center">
             <div className="flex items-center gap-2">
