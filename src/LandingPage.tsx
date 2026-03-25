@@ -73,7 +73,8 @@ const AIChat = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) =
     playSound(SOUNDS.CLICK, 0.3);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      const ai = new GoogleGenAI({ apiKey: apiKey as string });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: userMessage,
@@ -118,12 +119,13 @@ const AIChat = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) =
     <AnimatePresence>
       {isOpen && (
         <motion.div
+          key="chatbox"
           initial={{ opacity: 0, y: 100, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 100, scale: 0.9 }}
-          className="fixed bottom-20 right-4 md:bottom-28 md:right-8 w-[calc(100%-2rem)] md:w-[350px] h-[500px] hud-border z-50 flex flex-col overflow-hidden shadow-2xl"
+          className="fixed bottom-20 right-4 md:bottom-28 md:right-8 w-[calc(100%-2rem)] md:w-[350px] h-[500px] bg-army-black/95 backdrop-blur-xl hud-border z-50 flex flex-col overflow-hidden shadow-2xl"
         >
-          <div className="p-4 border-b border-army-gold/20 bg-army-gold/5 flex justify-between items-center">
+          <div className="p-4 border-b border-army-gold/20 bg-army-gold/10 flex justify-between items-center">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-neon-green rounded-full animate-pulse" />
               <span className="text-[10px] font-black uppercase tracking-widest text-army-gold">Comms_Link // SFC_Lantigua</span>
@@ -1553,6 +1555,7 @@ export const LandingPage = ({ onDashboardClick }: { onDashboardClick: () => void
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         onClick={() => {
+          console.log("Chat button clicked, isChatOpen:", isChatOpen);
           setIsChatOpen(!isChatOpen);
           playSound(SOUNDS.CLICK);
         }}

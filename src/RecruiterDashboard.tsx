@@ -45,7 +45,7 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { onSnapshot, collection, query, orderBy, updateDoc, doc, where, getDoc, setDoc } from 'firebase/firestore';
-import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
+import { signInWithRedirect, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from './firebase';
 import { Lead, Subscription } from './types';
 import { cn } from './lib/utils';
@@ -73,7 +73,7 @@ const SOURCE_DATA = [
 ];
 
 export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [isFirebaseAuthenticated, setIsFirebaseAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'admin' | 'recruiter' | 'pending' | null>(null);
   const [userSlug, setUserSlug] = useState<string | null>(null);
@@ -323,7 +323,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   const handleGoogleSignIn = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch (err) {
       console.error("Sign in error:", err);
       setError("Failed to authenticate with Google");
