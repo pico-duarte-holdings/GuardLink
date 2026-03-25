@@ -25,7 +25,8 @@ import {
   VolumeX,
   Send,
   Loader2,
-  Bell
+  Bell,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -245,10 +246,19 @@ const Navbar = ({ onDashboardClick }: { onDashboardClick: () => void }) => {
           </div>
         </div>
 
-        {/* Mobile Toggle */}
-        <button className="lg:hidden text-white p-2 hover:bg-white/5 transition-colors" onClick={() => setIsOpen(!isOpen)}>
-          {isOpen ? <X className="w-6 h-6 text-army-gold" /> : <Menu className="w-6 h-6" />}
-        </button>
+        {/* Mobile Actions */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <button 
+            onClick={onDashboardClick} 
+            className="text-zinc-400 hover:text-army-gold p-2 transition-colors flex items-center justify-center"
+            aria-label="Admin Login"
+          >
+            <Lock className="w-5 h-5" />
+          </button>
+          <button className="text-white p-2 hover:bg-white/5 transition-colors" onClick={() => setIsOpen(!isOpen)}>
+            {isOpen ? <X className="w-6 h-6 text-army-gold" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu */}
@@ -344,14 +354,7 @@ const Hero = ({ onTrack, recruiterName }: { onTrack: (el: string) => void, recru
         </p>
         <div className="flex flex-col sm:flex-row gap-6 justify-center">
           <a 
-            href="#register" 
-            onClick={() => onTrack('Hero: Mission Start')}
-            className="btn-gaming text-xl px-12"
-          >
-            Mission Start
-          </a>
-          <a 
-            href="tel:1234567890" 
+            href="tel:5614597845" 
             onClick={() => onTrack('Hero: Call HQ')}
             className="hud-border py-4 px-10 text-xl font-black uppercase tracking-tighter flex items-center justify-center gap-3 hover:bg-army-gold/10 transition-colors"
           >
