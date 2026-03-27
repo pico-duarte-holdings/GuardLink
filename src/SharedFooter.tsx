@@ -8,21 +8,9 @@ import { Shield } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import { Link } from 'react-router-dom';
+import GuardLinkIcon from './GuardLinkIcon';
 
 // GuardLink Diamond Badge Logo Component
-const GuardLinkIcon = ({ className = "w-8 h-8" }: { className?: string }) => (
-  <svg viewBox="0 0 40 40" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
-    <g transform="translate(20, 20) rotate(45)">
-      <rect x="-16" y="-16" width="32" height="32" rx="4" ry="4"
-        fill="none" stroke="currentColor" strokeWidth="2" />
-    </g>
-    <g transform="translate(20, 20)">
-      <path d="M0 -9 L8 0 L5.5 0 L0 -6 L-5.5 0 L-8 0 Z" fill="currentColor" />
-      <path d="M0 -1 L8 8 L5.5 8 L0 2 L-5.5 8 L-8 8 Z" fill="currentColor" opacity="0.5" />
-    </g>
-  </svg>
-);
-
 const DEFAULT_PROFILE = {
   uid: 'admin',
   displayName: 'SFC Angel Lantigua',
@@ -86,8 +74,8 @@ export const SharedFooter = ({ slugParam }: { slugParam: string }) => {
   return (
     <footer className="py-20 border-t border-zinc-900 bg-army-black/50">
       <div className="max-w-7xl mx-auto px-4 flex flex-col items-center gap-12 text-center">
-        <Link to={`/${slugQuery}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <GuardLinkIcon className="text-army-gold w-8 h-8 glow-text" />
+        <Link to={`/${slugQuery}`} className="flex flex-col items-center gap-2 hover:opacity-80 transition-opacity">
+              <GuardLinkIcon className="text-army-gold w-10 h-10 glow-text" />
           <span className="text-3xl font-black tracking-tighter uppercase italic text-white">GUARD<span className="text-army-gold">LINK</span></span>
         </Link>
 

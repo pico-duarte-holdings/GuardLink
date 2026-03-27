@@ -7,6 +7,7 @@ import { Menu, X, Lock, ChevronRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
+import GuardLinkIcon from './GuardLinkIcon';
 
 interface SharedNavbarProps {
   slugParam: string;

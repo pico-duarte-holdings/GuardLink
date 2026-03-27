@@ -9,6 +9,7 @@ import { Search, MapPin, Phone, MessageSquare, Mail, ArrowRight, Users, Loader2 
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import { cn } from './lib/utils';
+import GuardLinkIcon from './GuardLinkIcon';
 
 interface MatchedRecruiter {
   slug: string;

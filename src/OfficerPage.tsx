@@ -12,6 +12,7 @@ import { FloatingCTA } from './FloatingCTA';
 import { SharedChatbot } from './SharedChatbot';
 import { SharedLeadCapture } from './SharedLeadCapture';
 import { BasicTrainingGame } from './BasicTrainingGame';
+import GuardLinkIcon from './GuardLinkIcon';
 
 export const OfficerPage = ({ onBack, slugParam }: { onBack: () => void, slugParam: string }) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);

@@ -19,6 +19,7 @@ import { SharedFooter } from './SharedFooter';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import { RecruiterFinder } from './RecruiterFinder';
+import GuardLinkIcon from './GuardLinkIcon';
 
 interface RecruiterProfile {
   displayName: string;
