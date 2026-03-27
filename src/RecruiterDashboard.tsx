@@ -2,508 +2,592 @@
 Copyright 2026 Pico Duarte Holdings LLC. All rights reserved.
 This code, design, and associated assets may not be reproduced, distributed, or transmitted in any form or by any means without prior written permission.
 */
-import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  TrendingUp, 
-  Mail, 
-  Calendar, 
-  CheckCircle, 
-  Clock, 
-  Search, 
-  Filter,
-  MoreVertical,
-  ArrowLeft,
-  LogOut,
-  ShieldAlert,
-  Download,
-  Activity,
-  CheckSquare,
-  Square,
-  Trash2,
-  ChevronDown,
-  LogIn,
-  Loader2,
-  History,
-  Eye,
-  X,
-  UserPlus,
-  Moon,
-  Sun
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import {
+  Users, TrendingUp, Mail, Calendar, CheckCircle, Clock, Search, Filter,
+  ArrowLeft, LogOut, ShieldAlert, Download, CheckSquare, Square, Trash2,
+  LogIn, Loader2, History, Eye, X, UserPlus, Moon, Sun, Settings, Smartphone,
+  MapPin, Instagram, Facebook, Link as LinkIcon, Linkedin, Youtube, MessageSquare,
+  Phone, Edit, Plus, Upload, QrCode, Forward, AlertTriangle, LayoutGrid, List, Target
 } from 'lucide-react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
-} from 'recharts';
+import { MissionControl } from './MissionControl';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
-import { onSnapshot, collection, query, orderBy, updateDoc, doc, where, getDoc, setDoc } from 'firebase/firestore';
+import { onSnapshot, collection, query, orderBy, updateDoc, doc, setDoc, deleteDoc, addDoc, getDoc } from 'firebase/firestore';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { db, auth, handleFirestoreError, OperationType } from './firebase';
+import { db, auth, storage } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Lead, Subscription } from './types';
 import { cn } from './lib/utils';
 import { Bell } from 'lucide-react';
+import { SharedFooter } from './SharedFooter';
+import { FloatingCTA } from './FloatingCTA';
+import { SharedChatbot } from './SharedChatbot';
+import { BasicTrainingGame } from './BasicTrainingGame';
 
-// Mock Data
-const MOCK_LEADS: Lead[] = [
-  { timestamp: '2026-03-24 10:00', firstName: 'John', lastName: 'Doe', email: 'john@example.com', phone: '561-123-4567', age: '19', education: 'HS Graduate', interest: 'Enlisted', mos: '11B', source: 'Instagram', message: 'Interested in infantry.', status: 'New' },
-  { timestamp: '2026-03-23 15:30', firstName: 'Jane', lastName: 'Smith', email: 'jane@example.com', phone: '561-987-6543', age: '22', education: 'College Student', interest: 'Officer', mos: '68W', source: 'FAU Campus', message: 'Want to be a medic.', status: 'Contacted' },
-  { timestamp: '2026-03-22 09:15', firstName: 'Mike', lastName: 'Johnson', email: 'mike@example.com', phone: '561-555-0199', age: '18', education: 'HS Student', interest: 'Enlisted', mos: '31B', source: 'Friend', message: 'Looking for MP info.', status: 'Qualified' },
-];
-
-const STATS_DATA = [
-  { name: 'New', value: 12, color: '#FFD530' },
-  { name: 'Contacted', value: 25, color: '#3b82f6' },
-  { name: 'Qualified', value: 8, color: '#10b981' },
-  { name: 'Scheduled', value: 5, color: '#f59e0b' },
-];
-
-const SOURCE_DATA = [
-  { name: 'Instagram', count: 45 },
-  { name: 'Campus', count: 32 },
-  { name: 'Referral', count: 18 },
-  { name: 'Search', count: 12 },
-];
+const LEAD_STATUSES = ['New', 'Contacted', 'Appointment', 'ASVAB', 'Physical', 'Waiver', 'Qualified', 'Enlisted'];
+const CHART_COLORS = ['#FFD530', '#00f2ff', '#39ff14', '#a855f7', '#ff0055', '#ffffff'];
+const PLATOONS = ['HQ', 'C1', 'C2', 'C3', 'C4'];
 
 export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [isFirebaseAuthenticated, setIsFirebaseAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'admin' | 'recruiter' | 'pending' | null>(null);
+  const [userPlatoons, setUserPlatoons] = useState<string[]>(['HQ']);
   const [userSlug, setUserSlug] = useState<string | null>(null);
-  const [password, setPassword] = useState('');
+  const [isCommander, setIsCommander] = useState(false);
   const [error, setError] = useState('');
-  
-  // Data State
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [team, setTeam] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'leads' | 'subscriptions' | 'team'>('leads');
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
 
-  // Filtering State
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showCreateRecruiter, setShowCreateRecruiter] = useState(false);
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [showCSVModal, setShowCSVModal] = useState(false);
+  const [showGame, setShowGame] = useState(false);
+
+  const [editingMember, setEditingMember] = useState<any | null>(null);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [editingSub, setEditingSub] = useState<Subscription | null>(null);
+  const [journeyLead, setJourneyLead] = useState<Lead | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [csvAssignee, setCsvAssignee] = useState('');
+  const [newNote, setNewNote] = useState('');
+
+  const [profileData, setProfileData] = useState({
+    slug: '', rank: '', firstName: '', lastName: '', cellPhone: '', officePhone: '',
+    officeExt: '', publicEmail: '', locationType: 'Armory', address1: '',
+    address2: '', city: '', state: 'FL', zip: '', instagram: '', facebook: '',
+    tiktok: '', linkedin: '', discord: '', youtube: '', linktree: '',
+    platoons: ['HQ'],
+    photoURL: '',
+    whyJoined: '',
+    civilianCareer: '',
+    favoritePartOfServing: '',
+    favoriteHobbies: '',
+    favoriteTravelPlace: '',
+    messageToProspects: '',
+    smsTemplate: 'Hey {{name}}, this is {{recruiter}} with the Guard. Are you still interested in leveling up your career?',
+    emailTemplate: 'Hello {{name}},\n\nThank you for your interest in the Guard. Let me know when you have time for a quick call to discuss your options.\n\nRespectfully,\n{{recruiter}}'
+  });
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [sourceFilter, setSourceFilter] = useState('All');
   const [mosFilter, setMosFilter] = useState('All');
+  const [recruiterFilter, setRecruiterFilter] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [showCreateRecruiter, setShowCreateRecruiter] = useState(false);
+
+  const [newLeadData, setNewLeadData] = useState({
+    firstName: '', lastName: '', phone: '', email: '', age: '', education: 'HS Graduate', interest: 'Enlisted', mos: 'TBD', source: 'Manual Entry'
+  });
+
   const [createRecruiterEmail, setCreateRecruiterEmail] = useState('');
   const [createRecruiterName, setCreateRecruiterName] = useState('');
   const [createRecruiterRole, setCreateRecruiterRole] = useState('recruiter');
   const [createRecruiterSlug, setCreateRecruiterSlug] = useState('');
-  const [editingMember, setEditingMember] = useState<any | null>(null);
+  const [createRecruiterPlatoons, setCreateRecruiterPlatoons] = useState<string[]>(['HQ']);
+  const [transferLeadsOnCreate, setTransferLeadsOnCreate] = useState(false);
 
-  // Selection State
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
-  const [journeyLead, setJourneyLead] = useState<Lead | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') !== 'light');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
-  // Theme State
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    return saved ? saved === 'dark' : true;
-  });
+  const handleTileClick = useCallback((filter: string) => {
+    setActiveTab('leads');
+    setStatusFilter(filter);
+    setViewMode('table');
+    setCurrentPage(1);
+    setSelectedEmails(new Set());
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-    if (isDarkMode) {
-      document.documentElement.classList.remove('light-theme');
-    } else {
-      document.documentElement.classList.add('light-theme');
-    }
+    if (isDarkMode) document.documentElement.classList.remove('light-theme');
+    else document.documentElement.classList.add('light-theme');
   }, [isDarkMode]);
 
-  // Firebase Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setIsFirebaseAuthenticated(!!user);
       if (user) {
         try {
-          // Check if admin by email first (fallback)
-          const isAdminEmail = user.email?.toLowerCase() === 'angellantigua98@gmail.com';
-          
-          // Fetch user doc
+          const isMaster = user.email?.toLowerCase() === 'angellantigua98@gmail.com';
+          setIsCommander(isMaster);
+
           const userDoc = await getDoc(doc(db, 'users', user.uid));
-          
           if (userDoc.exists()) {
             const data = userDoc.data();
-            
-            // Fix corrupted admin role if they logged in before the case-sensitivity fix
-            if (isAdminEmail && data.role !== 'admin') {
-              await updateDoc(doc(db, 'users', user.uid), { role: 'admin' });
-              setUserRole('admin');
-            } else {
-              setUserRole(data.role || (isAdminEmail ? 'admin' : 'recruiter'));
-            }
+            setUserRole(data.role || (isMaster ? 'admin' : 'recruiter'));
             setUserSlug(data.slug || null);
+            const loadedPlatoons = data.platoons || (data.platoon ? [data.platoon] : ['HQ']);
+            setUserPlatoons(loadedPlatoons);
+            setProfileData({
+              ...profileData, ...data, platoons: loadedPlatoons,
+              publicEmail: data.publicEmail || user.email || '',
+              smsTemplate: data.smsTemplate || profileData.smsTemplate,
+              emailTemplate: data.emailTemplate || profileData.emailTemplate,
+              whyJoined: data.whyJoined || '',
+              civilianCareer: data.civilianCareer || '',
+              favoritePartOfServing: data.favoritePartOfServing || '',
+              favoriteHobbies: data.favoriteHobbies || '',
+              favoriteTravelPlace: data.favoriteTravelPlace || '',
+              messageToProspects: data.messageToProspects || '',
+              photoURL: data.photoURL || data.profilePhoto || '',
+            });
           } else {
-            // Auto-create admin if it's the default admin email
-            if (isAdminEmail) {
-              await setDoc(doc(db, 'users', user.uid), {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName || 'Admin',
-                role: 'admin',
-                createdAt: new Date().toISOString()
-              });
-              setUserRole('admin');
+            if (isMaster) {
+              await setDoc(doc(db, 'users', user.uid), { uid: user.uid, email: user.email, displayName: user.displayName || 'Commander', role: 'admin', platoons: ['HQ', 'C1', 'C2', 'C3', 'C4'], createdAt: new Date().toISOString() });
+              setUserRole('admin'); setUserPlatoons(['HQ', 'C1', 'C2', 'C3', 'C4']);
             } else if (user.email) {
-              // Check if user is pre-approved
               const preApprovedDoc = await getDoc(doc(db, 'pre_approved_users', user.email.toLowerCase()));
               if (preApprovedDoc.exists()) {
-                const preApprovedData = preApprovedDoc.data();
-                await setDoc(doc(db, 'users', user.uid), {
-                  uid: user.uid,
-                  email: user.email,
-                  displayName: user.displayName || preApprovedData.displayName || 'Recruiter',
-                  role: preApprovedData.role,
-                  slug: preApprovedData.slug,
-                  createdAt: new Date().toISOString()
-                });
-                setUserRole(preApprovedData.role);
-                setUserSlug(preApprovedData.slug);
+                const pData = preApprovedDoc.data();
+                const loadedPlatoons = pData.platoons || (pData.platoon ? [pData.platoon] : ['HQ']);
+                await setDoc(doc(db, 'users', user.uid), { uid: user.uid, email: user.email, displayName: pData.displayName || user.displayName || 'Recruiter', role: pData.role, slug: pData.slug, platoons: loadedPlatoons, createdAt: new Date().toISOString() });
+                setUserRole(pData.role); setUserSlug(pData.slug); setUserPlatoons(loadedPlatoons);
               } else {
-                // Create pending account
-                await setDoc(doc(db, 'users', user.uid), {
-                  uid: user.uid,
-                  email: user.email,
-                  displayName: user.displayName || 'Recruiter',
-                  role: 'pending',
-                  createdAt: new Date().toISOString()
-                });
-                setUserRole('pending');
-                setError('Account pending admin approval.');
+                await setDoc(doc(db, 'users', user.uid), { uid: user.uid, email: user.email, displayName: user.displayName || 'Recruiter', role: 'pending', createdAt: new Date().toISOString() });
+                setUserRole('pending'); setError('Account pending admin approval.');
               }
-            } else {
-              // Fallback if no email (shouldn't happen with Google Auth)
-              setUserRole('pending');
-              setError('Account pending admin approval.');
             }
           }
-        } catch (err) {
-          console.error("Error fetching user role:", err);
+        } catch (err: any) {
+          console.error('Auth/Firestore error:', err);
+          setError(err?.code === 'permission-denied'
+            ? 'Firestore permissions error — update your Firestore security rules to allow reads on the "users" collection.'
+            : `Login error: ${err?.message || 'Unknown error'}`);
+          setIsLoading(false);
         }
       } else {
-        setUserRole(null);
-        setUserSlug(null);
+        setUserRole(null); setUserSlug(null); setIsLoading(false);
       }
     });
     return () => unsubscribe();
   }, []);
 
-  // Firestore Real-time Listener
   useEffect(() => {
-    if (!isAuthenticated || !isFirebaseAuthenticated || !userRole) return;
-
-    const leadsRef = collection(db, 'leads');
-    const subsRef = collection(db, 'subscriptions');
-    
-    const qLeads = userRole === 'admin' 
-      ? query(leadsRef, orderBy('timestamp', 'desc'))
-      : query(leadsRef, where('recruiterId', '==', auth.currentUser?.uid), orderBy('timestamp', 'desc'));
-      
-    const unsubscribeLeads = onSnapshot(qLeads, 
-      (snapshot) => {
-        const leadsData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as (Lead & { id: string })[];
-        setLeads(leadsData);
-        setIsLoading(false);
-      },
-      (err) => {
-        console.error("Firestore error (leads):", err);
-        handleFirestoreError(err, OperationType.LIST, 'leads');
+    if (!isFirebaseAuthenticated || !userRole) return;
+    const unsubLeads = onSnapshot(query(collection(db, 'leads'), orderBy('timestamp', 'desc')), (snapshot) => {
+      let leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as (Lead & { id: string })[];
+      if (!isCommander) {
+        if (userRole === 'admin') leadsData = leadsData.filter(l => userPlatoons.includes(l.platoon || 'HQ'));
+        else leadsData = leadsData.filter(l => l.recruiterId === auth.currentUser?.uid);
       }
-    );
-
-    const qSubs = userRole === 'admin'
-      ? query(subsRef, orderBy('timestamp', 'desc'))
-      : query(subsRef, where('recruiterId', '==', auth.currentUser?.uid), orderBy('timestamp', 'desc'));
-      
-    const unsubscribeSubs = onSnapshot(qSubs, 
-      (snapshot) => {
-        const subsData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as (Subscription & { id: string })[];
-        setSubscriptions(subsData);
-      },
-      (err) => {
-        console.error("Firestore error (subscriptions):", err);
-        handleFirestoreError(err, OperationType.LIST, 'subscriptions');
+      setLeads(leadsData); setIsLoading(false);
+    }, (err) => { console.error('Leads snapshot error:', err); setIsLoading(false); setError('Could not load leads — check Firestore rules.'); });
+    const unsubSubs = onSnapshot(query(collection(db, 'subscriptions'), orderBy('timestamp', 'desc')), (snapshot) => {
+      let subsData = snapshot.docs.map(doc => ({ id: doc.id, status: 'New', ...doc.data() })) as (Subscription & { id: string })[];
+      if (!isCommander) {
+        if (userRole === 'admin') subsData = subsData.filter(s => userPlatoons.includes(s.platoon || 'HQ'));
+        else subsData = subsData.filter(s => s.recruiterId === auth.currentUser?.uid);
       }
-    );
-
-    let unsubscribeTeam = () => {};
-    if (userRole === 'admin') {
-      const qTeam = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-      unsubscribeTeam = onSnapshot(qTeam, 
-        (snapshot) => {
-          const teamData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          setTeam(teamData);
-        },
-        (err) => {
-          console.error("Firestore error (team):", err);
-          handleFirestoreError(err, OperationType.LIST, 'users');
-        }
-      );
-    }
-
-    return () => {
-      unsubscribeLeads();
-      unsubscribeSubs();
-      unsubscribeTeam();
-    };
-  }, [isAuthenticated, isFirebaseAuthenticated, userRole]);
-
-  const handleCreateRecruiter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!createRecruiterEmail) return;
-
-    try {
-      const emailLower = createRecruiterEmail.toLowerCase();
-      await setDoc(doc(db, 'pre_approved_users', emailLower), {
-        email: emailLower,
-        displayName: createRecruiterName,
-        role: createRecruiterRole,
-        slug: createRecruiterSlug,
-        createdAt: new Date().toISOString()
+      setSubscriptions(subsData);
+    }, (err) => { console.error('Subscriptions snapshot error:', err); });
+    const unsubTeam = onSnapshot(query(collection(db, 'users'), orderBy('createdAt', 'desc')), (snapshot) => {
+      let teamData = snapshot.docs.map(doc => {
+        const d = doc.data();
+        return { id: doc.id, ...d, platoons: d.platoons || (d.platoon ? [d.platoon] : ['HQ']) };
       });
-      setShowCreateRecruiter(false);
-      setCreateRecruiterEmail('');
-      setCreateRecruiterName('');
-      setCreateRecruiterRole('recruiter');
-      setCreateRecruiterSlug('');
-      // Show success message or toast here if needed
-    } catch (err) {
-      console.error("Error creating pre-approved user:", err);
-      handleFirestoreError(err, OperationType.CREATE, 'pre_approved_users');
-    }
+      if (!isCommander && userRole === 'admin') {
+        teamData = teamData.filter(t => (t.platoons as string[]).some(p => userPlatoons.includes(p)));
+      }
+      setTeam(teamData);
+    }, (err) => { console.error('Team snapshot error:', err); });
+    return () => { unsubLeads(); unsubSubs(); unsubTeam(); };
+  }, [isFirebaseAuthenticated, userRole, userPlatoons, isCommander]);
+
+  const isLeadStale = (lead: any) => {
+    if (lead.status !== 'New' && lead.status !== 'Contacted') return false;
+    let lastAction = new Date(lead.timestamp).getTime();
+    if (lead.notes && lead.notes.length > 0) lastAction = Math.max(lastAction, new Date(lead.notes[lead.notes.length - 1].timestamp).getTime());
+    return (Date.now() - lastAction) / (1000 * 60 * 60) > 72;
   };
 
-  const handleUpdateMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingMember) return;
-    
-    try {
-      await updateDoc(doc(db, 'users', editingMember.uid), {
-        role: editingMember.role,
-        slug: editingMember.slug
-      });
-      setEditingMember(null);
-    } catch (err) {
-      console.error("Error updating member:", err);
-      handleFirestoreError(err, OperationType.UPDATE, 'users');
-    }
+  const isFollowUpDue = (lead: any) => {
+    if (!lead.followUpDate) return false;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const due = new Date(lead.followUpDate); due.setHours(0, 0, 0, 0);
+    return due.getTime() <= today.getTime();
   };
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const correctPassword = import.meta.env.VITE_DASHBOARD_PASSWORD || 'GUARD2026';
-    if (password === correctPassword) {
-      setIsAuthenticated(true);
-      setError('');
-    } else {
-      setError('Invalid Access Code');
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err) {
-      console.error("Sign in error:", err);
-      setError("Failed to authenticate with Google");
-    }
+  const getCommsLink = (type: 'sms' | 'email', lead: any) => {
+    const rName = `${profileData.rank} ${profileData.lastName}`.trim() || 'your recruiter';
+    if (type === 'sms') return `sms:${lead.phone}?body=${encodeURIComponent(profileData.smsTemplate.replace(/{{name}}/g, lead.firstName).replace(/{{recruiter}}/g, rName))}`;
+    return `mailto:${lead.email}?subject=Army National Guard&body=${encodeURIComponent(profileData.emailTemplate.replace(/{{name}}/g, lead.firstName).replace(/{{recruiter}}/g, rName))}`;
   };
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setIsAuthenticated(false);
+      setShowLogoutConfirm(false);
+      setUserRole(null);
+      setIsCommander(false);
+      setUserSlug(null);
+      setUserPlatoons(['HQ']);
+      setLeads([]);
+      setSubscriptions([]);
+      setTeam([]);
     } catch (err) {
-      console.error("Logout error:", err);
+      console.error('Logout error:', err);
     }
   };
 
-  const filteredLeads = leads.filter(lead => {
-    const matchesSearch = 
-      lead.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.phone.includes(searchQuery) ||
-      lead.mos.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'All' || lead.status === statusFilter;
-    const matchesSource = sourceFilter === 'All' || lead.source === sourceFilter;
-    const matchesMos = mosFilter === 'All' || lead.mos === mosFilter;
-    
-    const leadDate = new Date(lead.timestamp.split(' ')[0]);
-    const matchesStartDate = !startDate || leadDate >= new Date(startDate);
-    const matchesEndDate = !endDate || leadDate <= new Date(endDate);
+  const handleInlineStatusUpdate = async (id: string, newStatus: string, type: 'lead' | 'sub' = 'lead') => {
+    try { await updateDoc(doc(db, type === 'lead' ? 'leads' : 'subscriptions', id), { status: newStatus }); } catch (err) { console.error(err); }
+  };
 
-    return matchesSearch && matchesStatus && matchesSource && matchesMos && matchesStartDate && matchesEndDate;
-  });
+  const handleInlineRoleUpdate = async (id: string, newRole: string) => {
+    try { await updateDoc(doc(db, 'users', id), { role: newRole }); } catch (err) { console.error(err); }
+  };
+
+  const handleManualAddLead = async (e: React.MouseEvent | React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser || !newLeadData.firstName || !newLeadData.lastName || !newLeadData.email) return;
+    try {
+      const generatedName = `${profileData.rank} ${profileData.lastName}`.trim();
+      const payload: any = {
+        firstName: newLeadData.firstName, lastName: newLeadData.lastName, phone: newLeadData.phone, email: newLeadData.email,
+        timestamp: new Date().toISOString(), status: 'New', recruiterId: auth.currentUser.uid, recruiterName: generatedName,
+        platoon: profileData.platoons && profileData.platoons.length > 0 ? profileData.platoons[0] : 'HQ', optIn: true
+      };
+      if (activeTab === 'leads') {
+        payload.age = newLeadData.age || ''; payload.education = newLeadData.education || 'HS Graduate';
+        payload.interest = newLeadData.interest || 'Enlisted'; payload.mos = newLeadData.mos || 'TBD'; payload.source = newLeadData.source || 'Manual Entry';
+      }
+      if (activeTab === 'subscriptions') payload.name = `${newLeadData.firstName} ${newLeadData.lastName}`.trim();
+      await addDoc(collection(db, activeTab === 'leads' ? 'leads' : 'subscriptions'), payload);
+      setShowAddLeadModal(false); setNewLeadData({ firstName: '', lastName: '', phone: '', email: '', age: '', education: 'HS Graduate', interest: 'Enlisted', mos: 'TBD', source: 'Manual Entry' });
+    } catch (err: any) { alert("Error: " + err.message); }
+  };
+
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !auth.currentUser) return;
+
+    let targetUid = auth.currentUser.uid;
+    let targetName = `${profileData.rank} ${profileData.lastName}`.trim() || 'Recruiter';
+    let targetPlatoon = profileData.platoons && profileData.platoons.length > 0 ? profileData.platoons[0] : 'HQ';
+
+    if (userRole === 'admin' || isCommander) {
+      if (!csvAssignee) { alert("Please select a recruiter to assign these leads to."); return; }
+      const assignedRecruiter = team.find(t => t.uid === csvAssignee);
+      if (assignedRecruiter) {
+        targetUid = assignedRecruiter.uid; targetName = assignedRecruiter.displayName || 'Recruiter';
+        targetPlatoon = assignedRecruiter.platoons && assignedRecruiter.platoons.length > 0 ? assignedRecruiter.platoons[0] : 'HQ';
+      }
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+      const rows = text.split('\n').filter(row => row.trim() !== '');
+      const startIdx = rows[0].toLowerCase().includes('email') ? 1 : 0;
+      let count = 0;
+      for (let i = startIdx; i < rows.length; i++) {
+        const cols = rows[i].split(',');
+        if (cols.length >= 2) {
+          try {
+            await addDoc(collection(db, 'leads'), {
+              firstName: cols[0]?.replace(/["']/g, '').trim() || 'Unknown', lastName: cols[1]?.replace(/["']/g, '').trim() || '',
+              email: cols[2]?.replace(/["']/g, '').trim() || '', phone: cols[3]?.replace(/["']/g, '').trim() || '',
+              source: 'CSV Import', status: 'New', mos: 'TBD', timestamp: new Date().toISOString(),
+              recruiterId: targetUid, recruiterName: targetName, platoon: targetPlatoon
+            });
+            count++;
+          } catch (err) {}
+        }
+      }
+      alert(`Imported ${count} records!`); setShowCSVModal(false); setCsvAssignee('');
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleUpdateLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLead || !editingLead.id) return;
+    try {
+      let rName = editingLead.recruiterName;
+      let rPlatoon = editingLead.platoon;
+      // If a recruiter is selected, pull their name. Platoon only auto-updates if Commander didn't manually set one.
+      if (editingLead.recruiterId) {
+        const found = team.find(t => t.uid === editingLead.recruiterId);
+        if (found) {
+          rName = found.displayName;
+          // Only auto-set platoon from recruiter if the user didn't explicitly pick a different platoon
+          if (!(editingLead as any)._platoonManuallySet) {
+            rPlatoon = found.platoons && found.platoons.length > 0 ? found.platoons[0] : 'HQ';
+          }
+        }
+      }
+      await updateDoc(doc(db, 'leads', editingLead.id), {
+        firstName: editingLead.firstName, lastName: editingLead.lastName, phone: editingLead.phone, email: editingLead.email,
+        mos: editingLead.mos, status: editingLead.status, recruiterId: editingLead.recruiterId || '', recruiterName: rName || '',
+        platoon: rPlatoon, followUpDate: editingLead.followUpDate || ''
+      });
+      setEditingLead(null);
+    } catch (err: any) { alert("Error: " + err.message); }
+  };
+
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLead || !editingLead.id || !newNote.trim()) return;
+    try {
+      const noteObj = { text: newNote.trim(), timestamp: new Date().toISOString(), author: `${profileData.rank} ${profileData.lastName}`.trim() || 'Recruiter' };
+      const updatedNotes = [...(editingLead.notes || []), noteObj];
+      await updateDoc(doc(db, 'leads', editingLead.id), { notes: updatedNotes });
+      setEditingLead({ ...editingLead, notes: updatedNotes }); setNewNote('');
+    } catch (err: any) { alert("Error: " + err.message); }
+  };
+
+  const handleUpdateSub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSub || !editingSub.id) return;
+    try {
+      await updateDoc(doc(db, 'subscriptions', editingSub.id), { name: editingSub.name, phone: editingSub.phone, email: editingSub.email, status: editingSub.status });
+      setEditingSub(null);
+    } catch (err: any) { alert("Error: " + err.message); }
+  };
+
+  const handleDeleteLead = async (id: string, type: 'lead' | 'sub' = 'lead') => {
+    if (!window.confirm(`Permanently delete this record?`)) return;
+    try {
+      await deleteDoc(doc(db, type === 'lead' ? 'leads' : 'subscriptions', id));
+      if (type === 'lead') setEditingLead(null); else setEditingSub(null);
+    } catch (err) { console.error(err); }
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!auth.currentUser) return;
+    setIsUploadingPhoto(true);
+    try {
+      const storageRef = ref(storage, `profile-photos/${auth.currentUser.uid}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setProfileData({ ...profileData, photoURL: url });
+      await setDoc(doc(db, 'users', auth.currentUser.uid), { photoURL: url }, { merge: true });
+    } catch (err: any) { alert("Upload failed: " + err.message); }
+    setIsUploadingPhoto(false);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+    try {
+      console.log('Saving profile data:', profileData);
+      await setDoc(doc(db, 'users', auth.currentUser.uid), { ...profileData, displayName: `${profileData.rank} ${profileData.firstName} ${profileData.lastName}`.trim() }, { merge: true });
+      setUserSlug(profileData.slug || null);
+      setShowProfileModal(false);
+    } catch (err: any) { alert("Error: " + err.message); }
+  };
+
+  const handleCreateRecruiter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createRecruiterEmail) return;
+    try {
+      const emailLower = createRecruiterEmail.toLowerCase();
+      await setDoc(doc(db, 'pre_approved_users', emailLower), {
+        email: emailLower, displayName: createRecruiterName, role: createRecruiterRole, slug: createRecruiterSlug, platoons: createRecruiterPlatoons, createdAt: new Date().toISOString()
+      });
+
+      // If transfer toggle is on, auto-reassign unassigned leads from selected platoons to this recruiter
+      if (transferLeadsOnCreate && createRecruiterPlatoons.length > 0) {
+        const unassignedLeads = leads.filter(l =>
+          (!l.recruiterId || l.recruiterId === '') && createRecruiterPlatoons.includes(l.platoon || 'HQ')
+        );
+        if (unassignedLeads.length > 0) {
+          await Promise.all(unassignedLeads.map(l =>
+            updateDoc(doc(db, 'leads', l.id as string), { recruiterName: createRecruiterName, platoon: createRecruiterPlatoons[0] })
+          ));
+        }
+      }
+
+      setShowCreateRecruiter(false); setCreateRecruiterEmail(''); setCreateRecruiterName(''); setCreateRecruiterRole('recruiter'); setCreateRecruiterSlug(''); setCreateRecruiterPlatoons(['HQ']); setTransferLeadsOnCreate(false);
+    } catch (err: any) { alert("Error: " + err.message); }
+  };
+
+  const handleUpdateMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMember) return;
+    try {
+      const assignedZipCodes = editingMember.assignedZipCodes || [];
+      await updateDoc(doc(db, 'users', editingMember.uid), { role: editingMember.role, slug: editingMember.slug, platoons: editingMember.platoons, assignedZipCodes });
+
+      // Auto-transfer unassigned leads whose zip matches the recruiter's assigned zips
+      if (assignedZipCodes.length > 0) {
+        const matchingLeads = leads.filter(l =>
+          (!l.recruiterId || l.recruiterId === '' || l.recruiterId === 'generic') &&
+          l.zip && assignedZipCodes.includes(l.zip)
+        );
+        if (matchingLeads.length > 0) {
+          await Promise.all(matchingLeads.map(l =>
+            updateDoc(doc(db, 'leads', l.id as string), {
+              recruiterId: editingMember.uid,
+              recruiterName: editingMember.displayName || ''
+            })
+          ));
+        }
+      }
+
+      setEditingMember(null);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDeleteMember = async (memberId: string, memberEmail: string) => {
+    if (!window.confirm("Revoke access permanently?")) return;
+    try {
+      await deleteDoc(doc(db, 'users', memberId));
+      await deleteDoc(doc(db, 'pre_approved_users', memberEmail.toLowerCase()));
+      setEditingMember(null);
+    } catch (err) { console.error(err); }
+  };
+
+  const filteredLeads = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return leads.filter(lead => {
+      const matchesSearch = !q || lead.firstName.toLowerCase().includes(q) || lead.lastName.toLowerCase().includes(q) || lead.email.toLowerCase().includes(q) || lead.phone.includes(searchQuery) || lead.mos.toLowerCase().includes(q);
+      const matchesStatus = statusFilter === 'All' || lead.status === statusFilter;
+      const matchesSource = sourceFilter === 'All' || lead.source === sourceFilter;
+      const matchesMos = mosFilter === 'All' || lead.mos === mosFilter;
+      const matchesRecruiter = recruiterFilter === 'All' || lead.recruiterId === recruiterFilter;
+      if (!matchesSearch || !matchesStatus || !matchesSource || !matchesMos || !matchesRecruiter) return false;
+      if (startDate || endDate) { const leadDate = new Date(lead.timestamp.split(' ')[0]); if (startDate && leadDate < new Date(startDate)) return false; if (endDate && leadDate > new Date(endDate)) return false; }
+      return true;
+    });
+  }, [leads, searchQuery, statusFilter, sourceFilter, mosFilter, recruiterFilter, startDate, endDate]);
+
+  const filteredSubs = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return subscriptions.filter(sub => {
+      const matchesSearch = !q || sub.name.toLowerCase().includes(q) || sub.email.toLowerCase().includes(q) || sub.phone.includes(searchQuery);
+      return matchesSearch && (statusFilter === 'All' || sub.status === statusFilter) && (recruiterFilter === 'All' || sub.recruiterId === recruiterFilter);
+    });
+  }, [subscriptions, searchQuery, statusFilter, recruiterFilter]);
+
+  const filteredTeam = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return team.filter(member => {
+      const matchesSearch = !q || (member.displayName || '').toLowerCase().includes(q) || (member.email || '').toLowerCase().includes(q);
+      const matchesPlatoon = isCommander && recruiterFilter !== 'All' ? (member.platoons || []).includes(recruiterFilter) : true;
+      return matchesSearch && matchesPlatoon;
+    });
+  }, [team, searchQuery, recruiterFilter, isCommander]);
+
+  // Pagination
+  const totalPages = useMemo(() => {
+    const count = activeTab === 'leads' ? filteredLeads.length : activeTab === 'subscriptions' ? filteredSubs.length : filteredTeam.length;
+    return Math.max(1, Math.ceil(count / ITEMS_PER_PAGE));
+  }, [activeTab, filteredLeads.length, filteredSubs.length, filteredTeam.length]);
+
+  const paginatedLeads = useMemo(() => filteredLeads.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE), [filteredLeads, currentPage]);
+  const paginatedSubs = useMemo(() => filteredSubs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE), [filteredSubs, currentPage]);
+  const paginatedTeam = useMemo(() => filteredTeam.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE), [filteredTeam, currentPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, sourceFilter, mosFilter, recruiterFilter, activeTab]);
+
+  const exportToCSV = (dataToExport: any[]) => {
+    if(dataToExport.length === 0) return;
+    const allKeys = Object.keys(dataToExport[0]).filter(k => k !== 'interactions' && k !== 'id' && k !== 'notes');
+    const priorityKeys = ['firstName', 'lastName', 'phone', 'email'];
+    const headers = [...priorityKeys, ...allKeys.filter(k => !priorityKeys.includes(k))];
+    const csvContent = [headers.join(','), ...dataToExport.map(item => headers.map(h => `"${item[h] || ''}"`).join(','))].join('\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
+    link.setAttribute('download', `Export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  };
 
   const toggleSelectAll = () => {
-    if (selectedEmails.size === filteredLeads.length && filteredLeads.length > 0) {
-      setSelectedEmails(new Set());
-    } else {
-      setSelectedEmails(new Set(filteredLeads.map(l => l.email)));
-    }
+    const cl = activeTab === 'leads' ? filteredLeads : activeTab === 'subscriptions' ? filteredSubs : filteredTeam;
+    if (selectedEmails.size === cl.length && cl.length > 0) setSelectedEmails(new Set());
+    else setSelectedEmails(new Set(cl.map(l => l.email)));
   };
 
-  const toggleSelectLead = (email: string) => {
-    const newSelected = new Set(selectedEmails);
-    if (newSelected.has(email)) {
-      newSelected.delete(email);
-    } else {
-      newSelected.add(email);
-    }
-    setSelectedEmails(newSelected);
+  const toggleSelectEmail = (email: string) => {
+    const ns = new Set(selectedEmails);
+    if (ns.has(email)) ns.delete(email); else ns.add(email);
+    setSelectedEmails(ns);
   };
 
-  const handleBulkStatusUpdate = async (newStatus: string) => {
+  const handleBulkAction = async (action: 'status' | 'transfer' | 'role' | 'delete' | 'platoon', val?: string) => {
     try {
-      const updatePromises = leads
-        .filter(lead => selectedEmails.has(lead.email))
-        .map(lead => {
-          const leadDoc = doc(db, 'leads', (lead as any).id);
-          return updateDoc(leadDoc, { status: newStatus });
-        });
-      
-      await Promise.all(updatePromises);
+      const col = activeTab === 'leads' ? leads : activeTab === 'subscriptions' ? subscriptions : team;
+      const dbCol = activeTab === 'leads' ? 'leads' : activeTab === 'subscriptions' ? 'subscriptions' : 'users';
+      const items = col.filter(item => selectedEmails.has(item.email));
+
+      if (action === 'delete') {
+        if (!window.confirm(`Delete ${selectedEmails.size} records?`)) return;
+        await Promise.all(items.map(item => deleteDoc(doc(db, dbCol, item.id as string))));
+      } else if (action === 'status') {
+        await Promise.all(items.map(item => updateDoc(doc(db, dbCol, item.id as string), { status: val })));
+      } else if (action === 'role') {
+        await Promise.all(items.map(item => updateDoc(doc(db, dbCol, item.id as string), { role: val })));
+      } else if (action === 'transfer') {
+        const tr = team.find(t => t.uid === val);
+        if(!tr) return;
+        await Promise.all(items.map(item => updateDoc(doc(db, dbCol, item.id as string), { recruiterId: tr.uid, recruiterName: tr.displayName || 'Recruiter', platoon: tr.platoons && tr.platoons.length > 0 ? tr.platoons[0] : 'HQ' })));
+      } else if (action === 'platoon') {
+        if (!val) return;
+        await Promise.all(items.map(item => updateDoc(doc(db, dbCol, item.id as string), { platoon: val })));
+      }
       setSelectedEmails(new Set());
-    } catch (err) {
-      console.error("Bulk update error:", err);
-      handleFirestoreError(err, OperationType.UPDATE, 'leads');
-    }
+    } catch (err) { console.error(err); }
   };
 
-  const exportToCSV = (leadsToExport = filteredLeads) => {
-    const headers = ['Timestamp', 'First Name', 'Last Name', 'Email', 'Phone', 'Age', 'Education', 'Interest', 'MOS', 'Source', 'Status'];
-    const rows = leadsToExport.map(lead => [
-      lead.timestamp,
-      lead.firstName,
-      lead.lastName,
-      lead.email,
-      lead.phone,
-      lead.age,
-      lead.education,
-      lead.interest,
-      lead.mos,
-      lead.source,
-      lead.status
-    ]);
+  const { chartData, statusCounts } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    leads.forEach(l => { counts[l.status] = (counts[l.status] || 0) + 1; });
+    return {
+      statusCounts: counts,
+      chartData: [
+        { name: 'New', value: counts['New'] || 0, color: '#FFD530' },
+        { name: 'Contacted', value: counts['Contacted'] || 0, color: '#3b82f6' },
+        { name: 'Appt Set', value: counts['Appointment'] || 0, color: '#a855f7' },
+        { name: 'Qualified', value: counts['Qualified'] || 0, color: '#10b981' },
+        { name: 'Enlisted', value: counts['Enlisted'] || 0, color: '#ffffff' },
+      ]
+    };
+  }, [leads]);
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
+  const dynamicSourceData = useMemo(() => {
+    const sourceCount = leads.reduce((acc: Record<string, number>, lead) => {
+      const s = lead.source || 'Unknown'; acc[s] = (acc[s] || 0) + 1; return acc;
+    }, {});
+    return Object.keys(sourceCount).map((key, index) => ({ name: key, count: sourceCount[key], color: CHART_COLORS[index % CHART_COLORS.length] }));
+  }, [leads]);
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `FLARNG_Leads_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  if (!isAuthenticated || !isFirebaseAuthenticated || !userRole || userRole === 'pending') {
+  if (!isFirebaseAuthenticated || !userRole || userRole === 'pending') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-army-black p-4 relative overflow-hidden">
         <div className="scanline" />
-        <div className="w-full max-w-md hud-border p-6 md:p-8 border-army-gold/30">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-army-gold/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-army-gold/40 glow-border">
-              <ShieldAlert className="w-8 h-8 text-army-gold" />
-            </div>
-            <h2 className="text-2xl font-black uppercase tracking-tight glow-text">Secure <span className="text-army-gold">Access</span></h2>
-            <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mt-2">// Authorization_Required // Level_01_Clearance</p>
-          </div>
-          
-          <div className="space-y-6">
+        <div className="w-full max-w-md hud-border p-6 md:p-8 border-army-gold/30 text-center">
+          <ShieldAlert className="w-12 h-12 text-army-gold mx-auto mb-4" />
+          <h2 className="text-2xl font-black uppercase tracking-tight glow-text">Secure Access</h2>
+          <div className="mt-8 space-y-4">
             {userRole === 'pending' ? (
-              <div className="space-y-4 text-center">
-                <p className="text-army-gold text-xs font-mono uppercase tracking-widest border border-army-gold/30 bg-army-gold/10 p-4">
-                  Account pending admin approval. Please contact your section chief.
-                </p>
-                <button 
-                  onClick={() => signOut(auth)}
-                  className="w-full flex items-center justify-center gap-3 bg-zinc-900 border border-zinc-800 text-white py-4 font-black uppercase text-xs hover:bg-zinc-800 transition-colors"
-                >
-                  Sign Out
-                </button>
+              <p className="text-army-gold text-xs font-mono uppercase bg-army-gold/10 p-4 border border-army-gold/30">Pending Admin Approval.</p>
+            ) : !isFirebaseAuthenticated ? (
+              <button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())} className="w-full bg-white text-black py-4 font-black uppercase text-xs">Sign In with Google</button>
+            ) : error ? (
+              <div className="space-y-4">
+                <p className="text-red-400 text-xs font-mono bg-red-500/10 p-4 border border-red-500/30">{error}</p>
+                <button onClick={() => { setError(''); signOut(auth); }} className="w-full bg-army-gold text-army-black py-3 font-black uppercase text-xs">Try Again</button>
               </div>
-            ) : (
-              <>
-                {!isAuthenticated && (
-                  <form onSubmit={handleLogin} className="space-y-6">
-                    <div className="relative">
-                      <div className="absolute -top-2 left-3 bg-army-black px-2 text-[10px] font-black text-army-gold uppercase tracking-tighter z-10">Access_Code</div>
-                      <input 
-                        type="password"
-                        placeholder="••••••••"
-                        className="w-full bg-zinc-950/50 border border-zinc-800 rounded-none p-4 focus:border-army-gold outline-none font-mono text-army-gold placeholder:text-zinc-800"
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                      />
-                    </div>
-                    <button className="w-full btn-gaming py-4 text-sm">Initialize_Dashboard</button>
-                  </form>
-                )}
-
-                {isAuthenticated && !isFirebaseAuthenticated && (
-                  <div className="space-y-4">
-                    <p className="text-zinc-400 text-[10px] font-black uppercase text-center tracking-widest">Step 2: Firebase Authentication</p>
-                    <button 
-                      onClick={handleGoogleSignIn}
-                      className="w-full flex items-center justify-center gap-3 bg-white text-black py-4 font-black uppercase text-xs hover:bg-zinc-200 transition-colors"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      Sign In with Google
-                    </button>
-                  </div>
-                )}
-
-                {isAuthenticated && isFirebaseAuthenticated && !userRole && (
-                  <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                    <Loader2 className="w-8 h-8 text-army-gold animate-spin" />
-                    <p className="text-army-gold text-[10px] font-mono uppercase tracking-widest animate-pulse">
-                      Verifying_Clearance...
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-
-            {error && (
-              <motion.p 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-red-500 text-[10px] font-black uppercase tracking-widest text-center bg-red-500/10 py-2 border border-red-500/30"
-              >
-                [Error]: {error}
-              </motion.p>
-            )}
-            
-            <button type="button" onClick={onBack} className="w-full text-zinc-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-white transition-colors">Abort_Mission</button>
+            ) : <Loader2 className="w-8 h-8 text-army-gold animate-spin mx-auto" />}
+            <button onClick={onBack} className="text-zinc-500 font-black uppercase text-[10px] tracking-widest mt-4">Abort Mission</button>
           </div>
         </div>
       </div>
@@ -511,777 +595,556 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   }
 
   return (
-    <div className="min-h-screen bg-army-black text-white font-sans selection:bg-army-gold selection:text-army-black relative">
+    <div className="min-h-screen bg-army-black text-white font-sans pb-20 relative">
       <div className="scanline" />
-      
+      <input type="file" accept=".csv" ref={fileInputRef} onChange={handleCSVUpload} className="hidden" />
+
       {/* Header */}
-      <header className="bg-army-black/80 backdrop-blur-md border-b border-army-gold/20 py-3 md:py-4 px-4 md:px-6 flex justify-between items-center sticky top-0 z-50">
+      <header className="bg-army-black/80 backdrop-blur-md border-b border-army-gold/20 py-3 md:py-4 px-4 md:px-6 flex justify-between items-center sticky top-0 z-[40]">
         <div className="flex items-center gap-2 md:gap-4">
-          <button onClick={onBack} className="p-1 md:p-2 hover:bg-army-gold/10 rounded-none border border-transparent hover:border-army-gold/30 transition-all">
-            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 text-army-gold" />
-          </button>
+          <button onClick={onBack} className="p-1 md:p-2 hover:bg-army-gold/10"><ArrowLeft className="w-5 h-5 text-army-gold" /></button>
           <div className="flex flex-col">
             <h1 className="text-lg md:text-xl font-black uppercase tracking-tighter glow-text">Command <span className="text-army-gold">Center</span></h1>
-            <span className="text-[7px] md:text-[8px] font-mono text-zinc-500 uppercase tracking-widest leading-none mt-0.5">// System_Status: Online</span>
+            <span className="text-[7px] md:text-[8px] font-mono text-zinc-500 uppercase tracking-widest leading-none mt-0.5">// Platoon Access: {userPlatoons.join(', ')}</span>
           </div>
         </div>
         <div className="flex items-center gap-3 md:gap-6">
           <div className="hidden sm:flex items-center gap-3 px-4 py-2 bg-army-gold/5 border border-army-gold/20">
-            <div className="w-8 h-8 bg-army-gold rounded-none flex items-center justify-center text-army-black font-black text-xs">AL</div>
+            <div className="w-8 h-8 bg-army-gold flex items-center justify-center text-army-black font-black text-xs">{profileData.lastName?.substring(0,2).toUpperCase() || 'RC'}</div>
             <div className="flex flex-col">
-              <span className="text-[10px] font-black uppercase tracking-tighter leading-none">SFC Lantigua</span>
-              <span className="text-[8px] font-mono text-army-gold uppercase">Admin_Level_01</span>
+              <span className="text-[10px] font-black uppercase tracking-tighter">{`${profileData.rank} ${profileData.lastName}`.trim() || 'Recruiter'}</span>
+              <span className="text-[8px] font-mono text-army-gold uppercase">{isCommander ? 'Commander' : userRole === 'admin' ? 'Section Chief' : 'Field Agent'}</span>
             </div>
           </div>
-          <button 
-            onClick={() => setIsDarkMode(!isDarkMode)} 
-            className="p-2 text-zinc-500 hover:text-army-gold hover:bg-army-gold/10 border border-transparent hover:border-army-gold/30 transition-all"
-            title="Toggle Theme"
-          >
-            {isDarkMode ? <Sun className="w-4 h-4 md:w-5 md:h-5" /> : <Moon className="w-4 h-4 md:w-5 md:h-5" />}
-          </button>
-          <button onClick={handleLogout} className="p-2 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-all">
-            <LogOut className="w-4 h-4 md:w-5 md:h-5" />
-          </button>
+          <button onClick={() => setShowProfileModal(true)} className="text-zinc-500 hover:text-army-gold"><Settings className="w-5 h-5" /></button>
+          <button onClick={() => setIsDarkMode(!isDarkMode)} className="text-zinc-500 hover:text-army-gold">{isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
+          <button onClick={() => setShowLogoutConfirm(true)} className="text-zinc-500 hover:text-red-500"><LogOut className="w-5 h-5" /></button>
         </div>
       </header>
 
-      <main className="p-6 max-w-7xl mx-auto space-y-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-          {[
-            { label: 'Total_Squad', value: '128', icon: Users, color: 'text-neon-cyan' },
-            { label: 'New_Intel', value: '14', icon: TrendingUp, color: 'text-neon-green' },
-            { label: 'Pending_Comms', value: '8', icon: Clock, color: 'text-army-gold' },
-            { label: 'Enlistments', value: '3', icon: CheckCircle, color: 'text-white' },
-          ].map((stat, i) => (
-            <div key={i} className="hud-border p-6 flex items-center justify-between group hover:border-army-gold/60 transition-all">
-              <div>
-                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mb-1">{stat.label}</p>
-                <p className={cn("text-3xl font-black tracking-tighter", stat.color)}>{stat.value}</p>
-              </div>
-              <div className={cn("p-3 bg-white/5 border border-white/10 group-hover:border-army-gold/30 transition-all", stat.color)}>
-                <stat.icon className="w-6 h-6 opacity-80" />
-              </div>
-            </div>
-          ))}
+      <main className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+        {/* Stats — clickable tiles */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <button onClick={() => handleTileClick('All')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", activeTab === 'leads' && statusFilter === 'All' && "ring-2 ring-neon-cyan/50")}><div className="text-neon-cyan"><p className="text-[10px] uppercase font-black">Total Pipeline</p><p className="text-3xl font-black">{leads.length}</p></div><Users className="w-6 h-6 text-neon-cyan/50" /></button>
+          <button onClick={() => handleTileClick('New')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", activeTab === 'leads' && statusFilter === 'New' && "ring-2 ring-neon-green/50")}><div className="text-neon-green"><p className="text-[10px] uppercase font-black">New Intel</p><p className="text-3xl font-black">{statusCounts['New'] || 0}</p></div><TrendingUp className="w-6 h-6 text-neon-green/50" /></button>
+          <button onClick={() => handleTileClick('Appointment')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", activeTab === 'leads' && statusFilter === 'Appointment' && "ring-2 ring-purple-500/50")}><div className="text-purple-500"><p className="text-[10px] uppercase font-black">Appointments</p><p className="text-3xl font-black">{statusCounts['Appointment'] || 0}</p></div><Clock className="w-6 h-6 text-purple-500/50" /></button>
+          <button onClick={() => handleTileClick('Enlisted')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", activeTab === 'leads' && statusFilter === 'Enlisted' && "ring-2 ring-white/30")}><div className="text-white"><p className="text-[10px] uppercase font-black">Enlistments</p><p className="text-3xl font-black">{statusCounts['Enlisted'] || 0}</p></div><CheckCircle className="w-6 h-6 text-white/50" /></button>
         </div>
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 hud-border p-6">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-sm font-black uppercase tracking-widest glow-text">Intel_Pipeline <span className="text-army-gold">// Status</span></h3>
-              <div className="flex gap-2">
-                <div className="w-2 h-2 bg-neon-cyan animate-pulse" />
-                <div className="w-2 h-2 bg-neon-green animate-pulse delay-75" />
-                <div className="w-2 h-2 bg-army-gold animate-pulse delay-150" />
-              </div>
-            </div>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={STATS_DATA}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1a1a1a" vertical={false} />
-                  <XAxis dataKey="name" stroke="#52525b" fontSize={10} fontWeight="bold" tickLine={false} axisLine={false} />
-                  <YAxis stroke="#52525b" fontSize={10} fontWeight="bold" tickLine={false} axisLine={false} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#030000', border: '1px solid rgba(255, 213, 48, 0.3)', borderRadius: '0px', fontFamily: 'monospace' }}
-                    itemStyle={{ color: '#FFD530', fontSize: '10px', fontWeight: 'bold' }}
-                    cursor={{ fill: 'rgba(255, 213, 48, 0.05)' }}
-                  />
-                  <Bar dataKey="value" fill="#FFD530" radius={[0, 0, 0, 0]}>
-                    {STATS_DATA.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={['#FFD530', '#00f2ff', '#39ff14', '#ffffff'][index % 4]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="hud-border p-6">
-            <h3 className="text-sm font-black uppercase tracking-widest mb-8 glow-text">Source_Intel <span className="text-army-gold">// Origin</span></h3>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={SOURCE_DATA}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="count"
-                    stroke="none"
-                  >
-                    {SOURCE_DATA.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={['#FFD530', '#00f2ff', '#39ff14', '#ffffff'][index % 4]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#030000', border: '1px solid rgba(255, 213, 48, 0.3)', borderRadius: '0px', fontFamily: 'monospace' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <div className="lg:col-span-2 hud-border p-6 h-[300px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke="#1a1a1a" vertical={false} /><XAxis dataKey="name" stroke="#52525b" fontSize={10} /><YAxis stroke="#52525b" fontSize={10} /><Tooltip contentStyle={{backgroundColor: '#030000', border: '1px solid rgba(255,213,48,0.3)'}} /><Bar dataKey="value" fill="#FFD530">{chartData.map((e,i) => <Cell key={i} fill={e.color} />)}</Bar></BarChart></ResponsiveContainer></div>
+          <div className="hud-border p-6 h-[300px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={dynamicSourceData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} dataKey="count">{dynamicSourceData.map((e,i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip contentStyle={{backgroundColor: '#030000', border: '1px solid rgba(255,213,48,0.3)'}} /></PieChart></ResponsiveContainer></div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex gap-4 mb-6">
-          <button 
-            onClick={() => setActiveTab('leads')}
-            className={cn(
-              "px-8 py-3 font-black uppercase italic text-xs tracking-widest transition-all border-2",
-              activeTab === 'leads' 
-                ? "bg-army-gold text-army-black border-army-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]" 
-                : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600"
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Recruitment_Leads
-            </div>
-          </button>
-          <button 
-            onClick={() => setActiveTab('subscriptions')}
-            className={cn(
-              "px-8 py-3 font-black uppercase italic text-xs tracking-widest transition-all border-2",
-              activeTab === 'subscriptions' 
-                ? "bg-army-gold text-army-black border-army-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]" 
-                : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600"
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4" />
-              Intel_Subscribers
-            </div>
-          </button>
-          {userRole === 'admin' && (
-            <button 
-              onClick={() => setActiveTab('team')}
-              className={cn(
-                "px-8 py-3 font-black uppercase italic text-xs tracking-widest transition-all border-2",
-                activeTab === 'team' 
-                  ? "bg-army-gold text-army-black border-army-gold shadow-[0_0_15px_rgba(212,175,55,0.4)]" 
-                  : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600"
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4" />
-                Recruiter_Team
-              </div>
-            </button>
-          )}
+        {/* Tabs */}
+        <div className="flex gap-4">
+          <button onClick={() => {setActiveTab('leads'); setSelectedEmails(new Set());}} className={cn("px-6 py-2 font-black uppercase text-xs tracking-widest border-2", activeTab === 'leads' ? "bg-army-gold text-black border-army-gold" : "text-zinc-500 border-zinc-800")}>Leads</button>
+          <button onClick={() => {setActiveTab('subscriptions'); setSelectedEmails(new Set());}} className={cn("px-6 py-2 font-black uppercase text-xs tracking-widest border-2", activeTab === 'subscriptions' ? "bg-army-gold text-black border-army-gold" : "text-zinc-500 border-zinc-800")}>Subscribers</button>
+          <button onClick={() => {setActiveTab('mission' as any); setSelectedEmails(new Set());}} className={cn("px-6 py-2 font-black uppercase text-xs tracking-widest border-2 flex items-center gap-2", (activeTab as string) === 'mission' ? "bg-army-gold text-black border-army-gold" : "text-zinc-500 border-zinc-800")}><Target className="w-3 h-3" />Mission Control</button>
+          {(userRole === 'admin' || isCommander) && <button onClick={() => {setActiveTab('team'); setSelectedEmails(new Set());}} className={cn("px-6 py-2 font-black uppercase text-xs tracking-widest border-2", activeTab === 'team' ? "bg-army-gold text-black border-army-gold" : "text-zinc-500 border-zinc-800")}>Team</button>}
         </div>
 
-        {/* Lead Table */}
-        <div className="hud-border overflow-hidden">
-          <div className="p-4 md:p-6 border-b border-army-gold/10 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="flex flex-col">
-              <h3 className="text-sm font-black uppercase tracking-widest glow-text">
-                {activeTab === 'leads' ? 'Recent_Leads' : activeTab === 'subscriptions' ? 'Recent_Subscribers' : 'Recruiter_Team'} 
-                <span className="text-army-gold">// {activeTab === 'leads' ? 'Active_Intel' : activeTab === 'subscriptions' ? 'Network_Growth' : 'Personnel_Roster'}</span>
-              </h3>
-              <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest mt-1">
-                Total_Records: {activeTab === 'leads' ? filteredLeads.length : activeTab === 'subscriptions' ? subscriptions.length : team.length} 
-                {activeTab === 'leads' && ` // Filter: ${statusFilter !== 'All' || sourceFilter !== 'All' || mosFilter !== 'All' || startDate || endDate || searchQuery ? 'Active' : 'None'}`}
-              </span>
-            </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              {userRole === 'admin' && activeTab === 'team' && (
-                <button 
-                  onClick={() => setShowCreateRecruiter(true)}
-                  className="px-4 py-2 bg-army-gold/10 border border-army-gold/50 text-army-gold text-xs font-black uppercase tracking-widest hover:bg-army-gold hover:text-army-black transition-colors flex items-center gap-2"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Create_Recruiter
-                </button>
-              )}
-              <div className="relative flex-1 sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                <input 
-                  placeholder="Search_Database..."
-                  className="w-full bg-zinc-950/50 border border-zinc-800 rounded-none py-2 pl-10 pr-4 text-xs font-mono focus:border-army-gold outline-none text-army-gold"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <button 
-                onClick={() => setShowFilters(!showFilters)}
-                className={cn(
-                  "p-2 bg-zinc-900/50 border border-zinc-800 rounded-none hover:border-army-gold/50 transition-colors",
-                  showFilters && "border-army-gold text-army-gold"
-                )}
-                title="Toggle Filters"
-              >
-                <Filter className="w-5 h-5" />
-              </button>
-              <button 
-                onClick={exportToCSV}
-                className="p-2 bg-zinc-900/50 border border-zinc-800 rounded-none hover:border-army-gold/50 transition-colors text-zinc-500 hover:text-army-gold"
-                title="Export Filtered Leads to CSV"
-              >
-                <Download className="w-5 h-5" />
-              </button>
-            </div>
+        {/* Mission Control Tab */}
+        {(activeTab as string) === 'mission' && (
+          <div className="hud-border bg-army-black/50 p-4 md:p-6">
+            <MissionControl leads={leads} recruiterUid={auth.currentUser?.uid} userRole={userRole} />
           </div>
+        )}
 
-          {showFilters && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              className="p-6 border-b border-army-gold/10 bg-army-gold/5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"
-            >
-              <div className="space-y-1">
-                <label className="text-[8px] font-black text-zinc-500 uppercase font-mono">Status_Code</label>
-                <select 
-                  value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value)}
-                  className="w-full bg-army-black border border-zinc-800 p-2 text-[10px] font-black uppercase focus:border-army-gold outline-none"
-                >
-                  <option value="All">All_Status</option>
-                  <option value="New">New</option>
-                  <option value="Contacted">Contacted</option>
-                  <option value="Qualified">Qualified</option>
-                  <option value="Scheduled">Scheduled</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[8px] font-black text-zinc-500 uppercase font-mono">Origin_Source</label>
-                <select 
-                  value={sourceFilter}
-                  onChange={e => setSourceFilter(e.target.value)}
-                  className="w-full bg-army-black border border-zinc-800 p-2 text-[10px] font-black uppercase focus:border-army-gold outline-none"
-                >
-                  <option value="All">All_Sources</option>
-                  <option value="Instagram">Instagram</option>
-                  <option value="FAU Campus">Campus</option>
-                  <option value="Friend">Referral</option>
-                  <option value="Search">Search</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[8px] font-black text-zinc-500 uppercase font-mono">MOS_ID</label>
-                <select 
-                  value={mosFilter}
-                  onChange={e => setMosFilter(e.target.value)}
-                  className="w-full bg-army-black border border-zinc-800 p-2 text-[10px] font-black uppercase focus:border-army-gold outline-none"
-                >
-                  <option value="All">All_MOS</option>
-                  <option value="11B">11B</option>
-                  <option value="68W">68W</option>
-                  <option value="31B">31B</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[8px] font-black text-zinc-500 uppercase font-mono">Start_Date</label>
-                <input 
-                  type="date"
-                  value={startDate}
-                  onChange={e => setStartDate(e.target.value)}
-                  className="w-full bg-army-black border border-zinc-800 p-2 text-[10px] font-black uppercase focus:border-army-gold outline-none text-white"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[8px] font-black text-zinc-500 uppercase font-mono">End_Date</label>
-                <input 
-                  type="date"
-                  value={endDate}
-                  onChange={e => setEndDate(e.target.value)}
-                  className="w-full bg-army-black border border-zinc-800 p-2 text-[10px] font-black uppercase focus:border-army-gold outline-none text-white"
-                />
-              </div>
-            </motion.div>
-          )}
-
-          {selectedEmails.size > 0 && (
-            <motion.div 
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              className="bg-army-gold p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sticky left-0 z-20"
-            >
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-                <span className="text-army-black font-black uppercase text-[10px] tracking-widest">
-                  {selectedEmails.size} Selected_Records
-                </span>
-                <div className="hidden sm:block h-4 w-px bg-army-black/20" />
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-army-black font-black uppercase text-[8px] tracking-tighter">Bulk_Status:</span>
-                  {['New', 'Contacted', 'Qualified', 'Scheduled'].map(status => (
-                    <button 
-                      key={status}
-                      onClick={() => handleBulkStatusUpdate(status)}
-                      className="bg-army-black/10 hover:bg-army-black/20 px-2 py-1 text-[8px] font-black uppercase border border-army-black/20 text-army-black transition-colors"
-                    >
-                      {status}
-                    </button>
-                  ))}
+        {/* Main Data Area */}
+        {(activeTab as string) !== 'mission' && <div className="hud-border bg-army-black/50">
+          <div className="p-4 border-b border-army-gold/10 flex justify-between items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-black uppercase glow-text tracking-widest">{activeTab} ({activeTab === 'leads' ? filteredLeads.length : activeTab === 'team' ? filteredTeam.length : filteredSubs.length})</h3>
+              {statusFilter !== 'All' && <button onClick={() => { setStatusFilter('All'); setCurrentPage(1); }} className="flex items-center gap-1 px-2 py-1 bg-army-gold/10 border border-army-gold/30 text-army-gold text-[9px] font-black uppercase hover:bg-army-gold/20"><span>Filtered: {statusFilter}</span><X className="w-3 h-3" /></button>}
+            </div>
+            <div className="flex gap-2 items-center flex-wrap">
+              {activeTab === 'leads' && (
+                <div className="flex bg-zinc-900 border border-zinc-800 rounded mr-2">
+                  <button onClick={() => setViewMode('table')} className={cn("p-2", viewMode === 'table' ? "bg-army-gold text-black" : "text-zinc-500")}><List className="w-4 h-4" /></button>
+                  <button onClick={() => setViewMode('kanban')} className={cn("p-2", viewMode === 'kanban' ? "bg-army-gold text-black" : "text-zinc-500")}><LayoutGrid className="w-4 h-4" /></button>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 self-end sm:self-auto">
-                <button 
-                  onClick={() => exportToCSV(leads.filter(l => selectedEmails.has(l.email)))}
-                  className="flex items-center gap-1 bg-army-black text-army-gold px-3 py-1 text-[8px] font-black uppercase hover:bg-zinc-900 transition-colors"
-                >
-                  <Download className="w-3 h-3" />
-                  Export
-                </button>
-                <button 
-                  onClick={() => setSelectedEmails(new Set())}
-                  className="text-army-black/60 hover:text-army-black font-black uppercase text-[8px] tracking-widest px-2"
-                >
-                  Cancel
-                </button>
-              </div>
-            </motion.div>
+              )}
+              {activeTab !== 'team' && <button onClick={() => setShowAddLeadModal(true)} className="px-4 py-2 bg-army-gold/10 text-army-gold text-[10px] font-black uppercase"><Plus className="w-4 h-4 inline mr-2"/>Add</button>}
+              {activeTab === 'leads' && <button onClick={() => { if(userRole==='admin'||isCommander) setShowCSVModal(true); else fileInputRef.current?.click(); }} className="px-4 py-2 bg-zinc-900 text-zinc-400 text-[10px] font-black uppercase hover:text-army-gold"><Upload className="w-4 h-4 inline mr-2"/>CSV</button>}
+              {activeTab !== 'team' && <button onClick={() => exportToCSV(activeTab === 'leads' ? filteredLeads : filteredSubs)} className="px-4 py-2 bg-zinc-900 text-zinc-400 text-[10px] font-black uppercase hover:text-army-gold"><Download className="w-4 h-4 inline mr-2"/>Export</button>}
+              {activeTab === 'team' && <button onClick={() => setShowCreateRecruiter(true)} className="px-4 py-2 bg-army-gold/10 text-army-gold text-[10px] font-black uppercase"><UserPlus className="w-4 h-4 inline mr-2"/>Create</button>}
+              <div className="relative"><Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" /><input placeholder="Search..." className="bg-zinc-950 border border-zinc-800 py-1 pl-8 pr-2 text-xs w-48 focus:border-army-gold outline-none" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></div>
+              <button onClick={() => setShowFilters(!showFilters)} className={cn("p-2 border", showFilters ? "bg-army-gold/10 border-army-gold text-army-gold" : "bg-zinc-900 border-zinc-800 text-zinc-500")}><Filter className="w-4 h-4" /></button>
+            </div>
+          </div>
+
+          {/* Filters Expanded */}
+          {showFilters && (
+            <div className="p-4 border-b border-army-gold/10 bg-army-gold/5 grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px] font-black uppercase">
+              {activeTab !== 'team' && <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-army-black border p-2"><option value="All">All Statuses</option>{LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select>}
+              {(userRole === 'admin' || isCommander) && <select value={recruiterFilter} onChange={e => setRecruiterFilter(e.target.value)} className="bg-army-black border p-2"><option value="All">All Team / Platoons</option>{activeTab==='team'&&isCommander ? PLATOONS.map(p => <option key={p} value={p}>{p}</option>) : team.map(m => <option key={m.uid} value={m.uid}>{m.displayName} ({(m.platoons||[]).join()})</option>)}</select>}
+            </div>
           )}
 
-          <div className="overflow-x-auto w-full">
-            <table className="w-full text-left border-collapse min-w-[800px]">
-              <thead>
-                <tr className="bg-army-gold/5 text-zinc-500 text-[8px] md:text-[10px] font-black uppercase tracking-widest">
-                  {activeTab === 'leads' ? (
-                    <>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 w-10">
-                        <button 
-                          onClick={toggleSelectAll}
-                          className="text-zinc-500 hover:text-army-gold transition-colors"
-                        >
-                          {selectedEmails.size === filteredLeads.length && filteredLeads.length > 0 ? (
-                            <CheckSquare className="w-4 h-4 text-army-gold" />
-                          ) : (
-                            <Square className="w-4 h-4" />
-                          )}
-                        </button>
-                      </th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Operator_Name</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Status_Code</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Specialization</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">MOS_ID</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Timestamp</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 text-right whitespace-nowrap">Actions</th>
-                    </>
-                  ) : activeTab === 'subscriptions' ? (
-                    <>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Subscriber_Name</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Email_Address</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Phone_Number</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Opt_In_Status</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Timestamp</th>
-                    </>
-                  ) : (
-                    <>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Recruiter_Name</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Email_Address</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Role</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Personal_Link</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 whitespace-nowrap">Joined_Date</th>
-                      <th className="py-3 md:py-4 px-4 md:px-6 border-b border-army-gold/10 text-right whitespace-nowrap">Actions</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-army-gold/5">
-                {isLoading ? (
+          {/* Bulk Action Bar */}
+          {selectedEmails.size > 0 && viewMode === 'table' && (
+            <div className="bg-army-gold p-3 flex justify-between items-center text-black text-[10px] font-black uppercase">
+              <div className="flex gap-4 items-center">
+                <span>{selectedEmails.size} Selected</span>
+                {activeTab !== 'team' && <select onChange={e => handleBulkAction('status', e.target.value)} className="bg-black text-army-gold p-1"><option value="">Change Status</option>{LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select>}
+                {activeTab !== 'team' && isCommander && <select onChange={e => handleBulkAction('platoon', e.target.value)} className="bg-black text-neon-green p-1"><option value="">Move to Team</option>{PLATOONS.map(p => <option key={p} value={p}>{p}</option>)}</select>}
+                {activeTab !== 'team' && <select onChange={e => handleBulkAction('transfer', e.target.value)} className="bg-black text-neon-cyan p-1"><option value="">Transfer to Recruiter</option>{(isCommander ? team : team.filter(m => (m.platoons || []).some((p: string) => userPlatoons.includes(p)))).map(m => <option key={m.uid} value={m.uid}>{m.displayName} ({(m.platoons||[]).join(', ')})</option>)}</select>}
+                {activeTab === 'team' && <select onChange={e => handleBulkAction('role', e.target.value)} className="bg-black text-army-gold p-1"><option value="">Change Role</option><option value="recruiter">Recruiter</option><option value="admin">Admin</option></select>}
+                <button onClick={() => handleBulkAction('delete')} className="bg-red-600 text-white px-2 py-1"><Trash2 className="w-3 h-3 inline mr-1"/>Delete</button>
+              </div>
+              <button onClick={() => setSelectedEmails(new Set())}>Cancel</button>
+            </div>
+          )}
+
+          {/* RENDERING: KANBAN vs TABLE */}
+          {isLoading ? <div className="py-20 text-center"><Loader2 className="w-8 h-8 animate-spin text-army-gold mx-auto" /></div> :
+          viewMode === 'kanban' && activeTab === 'leads' ? (
+            <div className="p-6 overflow-x-auto">
+              <div className="flex gap-4 snap-x min-h-[600px] w-max">
+                {LEAD_STATUSES.map(status => {
+                  const cols = filteredLeads.filter(l => l.status === status);
+                  return (
+                    <div key={status} className="w-[300px] bg-zinc-900/40 border border-zinc-800 rounded p-4 flex flex-col h-[700px]" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('leadId'); if (id) handleInlineStatusUpdate(id, status, 'lead'); }}>
+                      <h4 className="font-black uppercase text-army-gold mb-4 border-b border-zinc-800 pb-2">{status} ({cols.length})</h4>
+                      <div className="flex-1 overflow-y-auto space-y-3 scrollbar-hide pr-1">
+                        {cols.map(lead => {
+                          const stale = isLeadStale(lead); const due = isFollowUpDue(lead);
+                          return (
+                            <div key={lead.id} draggable onDragStart={e => e.dataTransfer.setData('leadId', lead.id as string)} className={cn("bg-army-black border p-3 rounded cursor-grab hover:scale-[1.02] transition-transform", stale ? "border-red-500 bg-red-950/30" : "border-zinc-800")}>
+                              <div className="flex justify-between items-start mb-2">
+                                <span className={cn("font-black text-sm uppercase", stale ? "text-red-400" : "text-white")}>
+                                  {stale && <AlertTriangle className="w-3 h-3 inline mr-1 text-red-500" />}
+                                  {lead.firstName} {lead.lastName}
+                                </span>
+                                {due && <span className="bg-army-gold text-black text-[8px] font-black px-1 animate-pulse">DUE</span>}
+                              </div>
+                              <div className="text-[9px] text-zinc-500 mb-2">{lead.email}</div>
+                              <select value={lead.status} onChange={e => handleInlineStatusUpdate(lead.id as string, e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 text-[9px] font-black uppercase text-zinc-400 p-1 mb-3"><option value={lead.status}>{lead.status}</option>{LEAD_STATUSES.map(s => s !== lead.status && <option key={s} value={s}>Move to: {s}</option>)}</select>
+                              <div className="flex justify-between items-center">
+                                <div className="flex gap-1">
+                                  <a href={`tel:${lead.phone}`} className="p-1 bg-zinc-800 rounded text-zinc-400 hover:text-neon-green"><Phone className="w-3 h-3"/></a>
+                                  <a href={getCommsLink('sms', lead)} className="p-1 bg-zinc-800 rounded text-zinc-400 hover:text-neon-cyan"><MessageSquare className="w-3 h-3"/></a>
+                                  <a href={getCommsLink('email', lead)} className="p-1 bg-zinc-800 rounded text-zinc-400 hover:text-army-gold"><Mail className="w-3 h-3"/></a>
+                                </div>
+                                <button onClick={()=>setEditingLead(lead)} className="text-[9px] uppercase text-zinc-500 font-black hover:text-army-gold"><Edit className="w-3 h-3 inline"/> Edit</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[10px] uppercase">
+                <thead className="bg-zinc-900/50 text-zinc-500 font-black border-b border-zinc-800">
                   <tr>
-                    <td colSpan={activeTab === 'leads' ? 7 : 5} className="py-12 text-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-army-gold mx-auto mb-4" />
-                      <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px]">Synchronizing_Intel...</p>
-                    </td>
+                    <th className="p-4 w-10"><button onClick={toggleSelectAll}><Square className="w-4 h-4"/></button></th>
+                    <th className="p-4">Name / Contact</th>
+                    {activeTab !== 'team' ? <th className="p-4">Status</th> : <th className="p-4">Role</th>}
+                    {activeTab === 'leads' && <><th className="p-4">Interest</th><th className="p-4">MOS</th></>}
+                    {activeTab === 'team' && <th className="p-4">Platoons</th>}
+                    <th className="p-4">Date</th>
+                    <th className="p-4 text-right">Actions</th>
                   </tr>
-                ) : activeTab === 'leads' ? (
-                  filteredLeads.length > 0 ? filteredLeads.map((lead, i) => (
-                    <tr key={i} className={cn(
-                      "group hover:bg-army-gold/5 transition-colors text-[10px] md:text-sm",
-                      selectedEmails.has(lead.email) && "bg-army-gold/10"
-                    )}>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <button 
-                          onClick={() => toggleSelectLead(lead.email)}
-                          className="text-zinc-500 hover:text-army-gold transition-colors"
-                        >
-                          {selectedEmails.has(lead.email) ? (
-                            <CheckSquare className="w-4 h-4 text-army-gold" />
-                          ) : (
-                            <Square className="w-4 h-4" />
-                          )}
-                        </button>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <div className="font-black uppercase tracking-tighter group-hover:text-army-gold transition-colors">{lead.firstName} {lead.lastName}</div>
-                        <div className="text-[8px] md:text-[10px] font-mono text-zinc-500">{lead.email}</div>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className={cn(
-                          "text-[7px] md:text-[9px] font-black uppercase px-2 md:px-3 py-0.5 md:py-1 border",
-                          lead.status === 'New' ? "bg-army-gold/10 border-army-gold/40 text-army-gold" :
-                          lead.status === 'Contacted' ? "bg-neon-cyan/10 border-neon-cyan/40 text-neon-cyan" :
-                          "bg-neon-green/10 border-neon-green/40 text-neon-green"
-                        )}>
-                          {lead.status}
-                        </span>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6 text-[9px] md:text-[11px] font-black uppercase tracking-tighter">{lead.interest}</td>
-                      <td className="py-3 md:py-4 px-4 md:px-6 text-[9px] md:text-[11px] font-mono text-army-gold">{lead.mos}</td>
-                      <td className="py-3 md:py-4 px-4 md:px-6 text-[8px] md:text-[10px] font-mono text-zinc-500">{lead.timestamp.split(' ')[0]}</td>
-                      <td className="py-3 md:py-4 px-4 md:px-6 text-right">
-                        <div className="flex justify-end gap-1 md:gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => setJourneyLead(lead)}
-                            title="View User Journey"
-                            className="p-1.5 md:p-2 hover:bg-army-gold/10 border border-transparent hover:border-army-gold/30 text-zinc-400 hover:text-army-gold transition-all"
-                          >
-                            <History className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                          </button>
-                          <button className="p-1.5 md:p-2 hover:bg-army-gold/10 border border-transparent hover:border-army-gold/30 text-zinc-400 hover:text-army-gold transition-all">
-                            <Mail className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                          </button>
-                          <button className="p-1.5 md:p-2 hover:bg-army-gold/10 border border-transparent hover:border-army-gold/30 text-zinc-400 hover:text-army-gold transition-all">
-                            <Calendar className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                          </button>
-                          <button className="p-1.5 md:p-2 hover:bg-army-gold/10 border border-transparent hover:border-army-gold/30 text-zinc-400">
-                            <MoreVertical className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                          </button>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {activeTab === 'leads' ? paginatedLeads.map(lead => {
+                    const stale = isLeadStale(lead); const due = isFollowUpDue(lead);
+                    return (
+                      <tr key={lead.id} className={cn("hover:bg-white/5", stale && "bg-red-950/20")}>
+                        <td className="p-4"><button onClick={() => toggleSelectEmail(lead.email)} className={selectedEmails.has(lead.email)?"text-army-gold":"text-zinc-500"}>{selectedEmails.has(lead.email) ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}</button></td>
+                        <td className="p-4 font-black">
+                          <div className={stale ? "text-red-400" : "text-white"}>
+                            {stale && <AlertTriangle className="w-3 h-3 inline mr-1 text-red-500" />}
+                            {lead.firstName} {lead.lastName}
+                            {due && <span className="bg-army-gold text-black px-1 ml-2 text-[8px] font-black animate-pulse">DUE</span>}
+                          </div>
+                          <div className="text-zinc-500">{lead.email} • {lead.phone}</div>
+                          <div className="text-[8px] text-army-gold mt-1">Assigned: {lead.recruiterName} ({lead.platoon})</div>
+                        </td>
+                        <td className="p-4"><select value={lead.status} onChange={e=>handleInlineStatusUpdate(lead.id as string, e.target.value)} className="bg-zinc-900 border border-zinc-800 p-1 text-[9px] uppercase font-black">{LEAD_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}</select></td>
+                        <td className="p-4 text-zinc-400">{lead.interest}</td>
+                        <td className="p-4 text-army-gold">{lead.mos}</td>
+                        <td className="p-4 text-zinc-500 font-mono">{lead.timestamp.split('T')[0]}</td>
+                        <td className="p-4 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1">
+                            <a href={`tel:${lead.phone}`} className="p-2 text-zinc-500 hover:text-neon-green inline-flex items-center justify-center"><Phone className="w-4 h-4"/></a>
+                            <a href={getCommsLink('sms', lead)} className="p-2 text-zinc-500 hover:text-neon-cyan inline-flex items-center justify-center"><MessageSquare className="w-4 h-4"/></a>
+                            <a href={getCommsLink('email', lead)} className="p-2 text-zinc-500 hover:text-army-gold inline-flex items-center justify-center"><Mail className="w-4 h-4"/></a>
+                            <button onClick={()=>setJourneyLead(lead)} className="p-2 text-zinc-500 hover:text-army-gold inline-flex items-center justify-center"><History className="w-4 h-4"/></button>
+                            <button onClick={()=>setEditingLead(lead)} className="p-2 text-zinc-500 hover:text-army-gold inline-flex items-center justify-center"><Edit className="w-4 h-4"/></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }) : activeTab === 'subscriptions' ? paginatedSubs.map(sub => (
+                    <tr key={sub.id} className="hover:bg-white/5">
+                      <td className="p-4"><button onClick={() => toggleSelectEmail(sub.email)} className={selectedEmails.has(sub.email)?"text-army-gold":"text-zinc-500"}>{selectedEmails.has(sub.email) ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}</button></td>
+                      <td className="p-4 font-black"><div className="text-white">{sub.name}</div><div className="text-zinc-500">{sub.email} • {sub.phone}</div></td>
+                      <td className="p-4"><select value={sub.status||'New'} onChange={e=>handleInlineStatusUpdate(sub.id as string, e.target.value, 'sub')} className="bg-zinc-900 border border-zinc-800 p-1 text-[9px] uppercase font-black">{LEAD_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}</select></td>
+                      <td className="p-4 text-zinc-500 font-mono">{sub.timestamp.split('T')[0]}</td>
+                      <td className="p-4 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          <a href={`tel:${sub.phone}`} className="p-2 text-zinc-500 hover:text-neon-green inline-flex items-center justify-center"><Phone className="w-4 h-4"/></a>
+                          <a href={`sms:${sub.phone}`} className="p-2 text-zinc-500 hover:text-neon-cyan inline-flex items-center justify-center"><MessageSquare className="w-4 h-4"/></a>
+                          <a href={`mailto:${sub.email}`} className="p-2 text-zinc-500 hover:text-army-gold inline-flex items-center justify-center"><Mail className="w-4 h-4"/></a>
+                          <button onClick={()=>setEditingSub(sub)} className="p-2 text-zinc-500 hover:text-army-gold inline-flex items-center justify-center"><Edit className="w-4 h-4"/></button>
                         </div>
                       </td>
                     </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan={7} className="py-12 text-center text-zinc-500 font-black uppercase italic tracking-widest text-xs">
-                        No_Intel_Found_In_Database
-                      </td>
+                  )) : paginatedTeam.map(m => (
+                    <tr key={m.id} className="hover:bg-white/5">
+                      <td className="p-4"><button onClick={() => toggleSelectEmail(m.email)} className={selectedEmails.has(m.email)?"text-army-gold":"text-zinc-500"}>{selectedEmails.has(m.email) ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}</button></td>
+                      <td className="p-4 font-black"><div className="text-white">{m.displayName}</div><div className="text-zinc-500">{m.email}</div></td>
+                      <td className="p-4"><select value={m.role} onChange={e=>handleInlineRoleUpdate(m.id, e.target.value)} className="bg-zinc-900 border border-zinc-800 p-1 text-[9px] uppercase font-black"><option value="recruiter">RECRUITER</option><option value="admin">ADMIN</option></select></td>
+                      <td className="p-4 text-neon-cyan">{(m.platoons||[]).join(', ')}</td><td className="p-4 text-zinc-500 font-mono">{m.createdAt?.split('T')[0]}</td>
+                      <td className="p-4 text-right"><button onClick={()=>setEditingMember(m)} className="p-2 text-zinc-500 hover:text-army-gold"><Edit className="w-4 h-4 inline"/></button></td>
                     </tr>
-                  )
-                ) : activeTab === 'subscriptions' ? (
-                  subscriptions.length > 0 ? subscriptions.map((sub, i) => (
-                    <tr key={i} className="group hover:bg-army-gold/5 transition-colors text-[10px] md:text-sm">
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className="font-black uppercase tracking-tight text-white">{sub.name}</span>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className="text-army-gold font-mono text-[10px]">{sub.email}</span>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className="text-zinc-400 font-mono text-[10px]">{sub.phone}</span>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className={cn(
-                          "px-2 py-1 rounded-none text-[8px] font-black uppercase tracking-widest border",
-                          sub.optIn ? "bg-neon-green/10 text-neon-green border-neon-green/30" : "bg-red-500/10 text-red-400 border-red-500/30"
-                        )}>
-                          {sub.optIn ? 'OPTED_IN' : 'OPTED_OUT'}
-                        </span>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className="text-zinc-500 font-mono text-[10px]">{sub.timestamp.split(' ')[0]}</span>
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-zinc-500 font-black uppercase italic tracking-widest text-xs">
-                        No_Subscribers_Found
-                      </td>
-                    </tr>
-                  )
-                ) : (
-                  team.length > 0 ? team.map((member, i) => (
-                    <tr key={i} className="group hover:bg-army-gold/5 transition-colors text-[10px] md:text-sm">
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className="font-black uppercase tracking-tight text-white">{member.displayName}</span>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className="text-army-gold font-mono text-[10px]">{member.email}</span>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className={cn(
-                          "px-2 py-1 rounded-none text-[8px] font-black uppercase tracking-widest border",
-                          member.role === 'admin' ? "bg-army-gold/10 text-army-gold border-army-gold/30" : 
-                          member.role === 'pending' ? "bg-red-500/10 text-red-500 border-red-500/30" : 
-                          "bg-zinc-800/50 text-zinc-300 border-zinc-700"
-                        )}>
-                          {member.role || 'recruiter'}
-                        </span>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        {member.slug ? (
-                          <a href={`/?r=${member.slug}`} target="_blank" rel="noopener noreferrer" className="text-neon-cyan hover:underline font-mono text-[10px]">
-                            /?r={member.slug}
-                          </a>
-                        ) : (
-                          <span className="text-zinc-500 font-mono text-[10px]">N/A</span>
-                        )}
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6">
-                        <span className="text-zinc-500 font-mono text-[10px]">{member.createdAt ? member.createdAt.split('T')[0] : 'Unknown'}</span>
-                      </td>
-                      <td className="py-3 md:py-4 px-4 md:px-6 text-right">
-                        <button 
-                          onClick={() => setEditingMember(member)}
-                          className="px-3 py-1 bg-army-gold/10 border border-army-gold/30 text-army-gold text-[10px] font-black uppercase tracking-widest hover:bg-army-gold hover:text-army-black transition-colors"
-                        >
-                          Edit
-                        </button>
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-zinc-500 font-black uppercase italic tracking-widest text-xs">
-                        No_Team_Members_Found
-                      </td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && viewMode === 'table' && (
+            <div className="p-4 border-t border-army-gold/10 flex justify-between items-center">
+              <span className="text-[10px] font-black uppercase text-zinc-500">
+                Page {currentPage} of {totalPages} — Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, activeTab === 'leads' ? filteredLeads.length : activeTab === 'subscriptions' ? filteredSubs.length : filteredTeam.length)} of {activeTab === 'leads' ? filteredLeads.length : activeTab === 'subscriptions' ? filteredSubs.length : filteredTeam.length}
+              </span>
+              <div className="flex gap-2">
+                <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className={cn("px-3 py-1 text-[10px] font-black uppercase border", currentPage === 1 ? "border-zinc-800 text-zinc-600 cursor-not-allowed" : "border-army-gold/30 text-army-gold hover:bg-army-gold/10")}>First</button>
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className={cn("px-3 py-1 text-[10px] font-black uppercase border", currentPage === 1 ? "border-zinc-800 text-zinc-600 cursor-not-allowed" : "border-army-gold/30 text-army-gold hover:bg-army-gold/10")}>Prev</button>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className={cn("px-3 py-1 text-[10px] font-black uppercase border", currentPage === totalPages ? "border-zinc-800 text-zinc-600 cursor-not-allowed" : "border-army-gold/30 text-army-gold hover:bg-army-gold/10")}>Next</button>
+                <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className={cn("px-3 py-1 text-[10px] font-black uppercase border", currentPage === totalPages ? "border-zinc-800 text-zinc-600 cursor-not-allowed" : "border-army-gold/30 text-army-gold hover:bg-army-gold/10")}>Last</button>
+              </div>
+            </div>
+          )}
+        </div>}
       </main>
 
-      {/* User Journey Modal */}
-      <AnimatePresence>
-        {journeyLead && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setJourneyLead(null)}
-              className="absolute inset-0 bg-army-black/90 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-2xl hud-border bg-zinc-950 overflow-hidden flex flex-col max-h-[80vh]"
-            >
-              <div className="p-6 border-b border-army-gold/20 bg-army-gold/5 flex justify-between items-center">
-                <div>
-                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-army-gold">User_Journey // Intel_Log</h3>
-                  <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{journeyLead.firstName} {journeyLead.lastName} // {journeyLead.email}</p>
-                </div>
-                <button 
-                  onClick={() => setJourneyLead(null)}
-                  className="p-2 hover:bg-army-gold/10 text-zinc-500 hover:text-army-gold transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+      {/* --- MODALS --- */}
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-hide">
-                {journeyLead.interactions && journeyLead.interactions.length > 0 ? (
-                  <div className="space-y-4">
-                    {journeyLead.interactions.map((interaction, idx) => (
-                      <div key={idx} className="flex gap-4 items-start group">
-                        <div className="mt-1 w-2 h-2 rounded-full bg-army-gold animate-pulse shadow-[0_0_8px_rgba(212,175,55,0.5)]" />
-                        <div className="flex-1 space-y-1">
-                          <div className="flex justify-between items-center">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-white group-hover:text-army-gold transition-colors">
-                              {interaction.element}
-                            </p>
-                            <p className="text-[8px] font-mono text-zinc-600">
-                              {new Date(interaction.timestamp).toLocaleTimeString()}
-                            </p>
-                          </div>
-                          <p className="text-[9px] font-mono text-zinc-500 uppercase italic">
-                            Action_Type: {interaction.type}
-                          </p>
-                        </div>
-                      </div>
+      {/* Create Recruiter Modal */}
+      {showCreateRecruiter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
+          <div className="hud-border bg-zinc-950 w-full max-w-md p-6">
+            <div className="flex justify-between mb-6"><h3 className="text-xl font-black text-army-gold uppercase">Create Recruiter</h3><button onClick={()=>setShowCreateRecruiter(false)}><X className="text-zinc-500 hover:text-white"/></button></div>
+            <form onSubmit={handleCreateRecruiter} className="space-y-4">
+              <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Email</label><input type="email" required value={createRecruiterEmail} onChange={e=>setCreateRecruiterEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold"/></div>
+              <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Name</label><input type="text" required value={createRecruiterName} onChange={e=>setCreateRecruiterName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold"/></div>
+              <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Role</label><select value={createRecruiterRole} onChange={e=>setCreateRecruiterRole(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none"><option value="recruiter">Recruiter</option><option value="admin">Admin</option></select></div>
+              <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-2 block">Platoon Access (Keycards)</label><div className="flex gap-2 flex-wrap">{PLATOONS.map(p=><label key={p} className="bg-zinc-900 border border-zinc-800 px-3 py-2 text-[10px] font-black text-white flex items-center gap-2"><input type="checkbox" checked={createRecruiterPlatoons.includes(p)} onChange={e=>{const updated = e.target.checked ? [...createRecruiterPlatoons, p] : createRecruiterPlatoons.filter(x=>x!==p); setCreateRecruiterPlatoons(updated);}} className="accent-army-gold"/>{p}</label>)}</div></div>
+              <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Slug Link</label><input type="text" required value={createRecruiterSlug} onChange={e=>setCreateRecruiterSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="e.g. john-doe" className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold"/><p className="text-[9px] text-zinc-600 mt-1">Lowercase letters, numbers, and dashes only</p></div>
+              <div className="bg-neon-cyan/5 border border-neon-cyan/20 p-3 mt-2"><label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={transferLeadsOnCreate} onChange={e => setTransferLeadsOnCreate(e.target.checked)} className="accent-neon-cyan w-4 h-4" /><div><span className="text-[10px] font-black uppercase text-neon-cyan">Transfer Unassigned Leads</span><p className="text-[9px] text-zinc-500 mt-0.5">Auto-assign unassigned leads from selected platoon(s) to this recruiter</p></div></label></div>
+              <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-800"><button type="button" onClick={()=>setShowCreateRecruiter(false)} className="px-4 py-2 font-black uppercase text-[10px] text-zinc-500">Cancel</button><button type="submit" className="px-4 py-2 font-black uppercase text-[10px] bg-army-gold text-black">Pre-Approve</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Member Modal */}
+      {editingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
+          <div className="hud-border bg-zinc-950 w-full max-w-md p-6">
+            <div className="flex justify-between mb-6"><h3 className="text-xl font-black text-army-gold uppercase">Manage Recruiter</h3><button onClick={()=>setEditingMember(null)}><X className="text-zinc-500 hover:text-white"/></button></div>
+            <form onSubmit={handleUpdateMember} className="space-y-4">
+              <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Role</label><select value={editingMember.role||'recruiter'} onChange={e=>setEditingMember({...editingMember, role: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none"><option value="recruiter">Recruiter</option><option value="admin">Admin</option></select></div>
+              <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-2 block">Platoon Access (Keycards)</label><div className="flex gap-2 flex-wrap">{PLATOONS.map(p=><label key={p} className="bg-zinc-900 border border-zinc-800 px-3 py-2 text-[10px] font-black text-white flex items-center gap-2"><input type="checkbox" checked={(editingMember.platoons||[]).includes(p)} onChange={e=>{const curr = editingMember.platoons||[]; const updated = e.target.checked ? [...curr, p] : curr.filter((x:string)=>x!==p); setEditingMember({...editingMember, platoons: updated});}} className="accent-army-gold"/>{p}</label>)}</div></div>
+              <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Slug Link</label><input type="text" value={editingMember.slug||''} onChange={e=>setEditingMember({...editingMember, slug: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold"/></div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 mb-2 block flex items-center gap-2"><MapPin className="w-3 h-3 text-army-gold"/>Assigned Zip Codes</label>
+                <div className="flex gap-2 mb-2">
+                  <input type="text" inputMode="numeric" maxLength={5} placeholder="ZIP CODE" value={editingMember._newZip||''} onChange={e=>setEditingMember({...editingMember, _newZip: e.target.value.replace(/\D/g,'')})} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();const z=(editingMember._newZip||'').trim();if(z.length===5){const cur=editingMember.assignedZipCodes||[];if(!cur.includes(z)){setEditingMember({...editingMember,assignedZipCodes:[...cur,z].sort(),_newZip:''});}else{setEditingMember({...editingMember,_newZip:''});}}}}} className="flex-1 bg-zinc-900 border border-zinc-700 px-3 py-2 text-xs font-black uppercase outline-none focus:border-army-gold"/>
+                  <button type="button" onClick={()=>{const z=(editingMember._newZip||'').trim();if(z.length===5){const cur=editingMember.assignedZipCodes||[];if(!cur.includes(z)){setEditingMember({...editingMember,assignedZipCodes:[...cur,z].sort(),_newZip:''});}else{setEditingMember({...editingMember,_newZip:''});}}}} disabled={!editingMember._newZip||editingMember._newZip.length!==5} className="px-3 py-2 bg-army-gold text-army-black text-xs font-black uppercase disabled:opacity-40">+ Add</button>
+                </div>
+                {(editingMember.assignedZipCodes||[]).length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {(editingMember.assignedZipCodes||[]).map((zip: string)=>(
+                      <span key={zip} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800 border border-zinc-700 text-xs font-mono text-zinc-300 rounded">{zip}<button type="button" onClick={()=>setEditingMember({...editingMember,assignedZipCodes:(editingMember.assignedZipCodes||[]).filter((z:string)=>z!==zip)})} className="text-zinc-500 hover:text-red-400 transition-colors font-black text-[10px]">✕</button></span>
                     ))}
                   </div>
                 ) : (
-                  <div className="py-12 text-center">
-                    <Eye className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
-                    <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">No_Interaction_Data // Direct_Submission</p>
-                  </div>
+                  <p className="text-[10px] text-zinc-600 italic">No zip codes assigned.</p>
                 )}
+                <p className="text-[9px] text-zinc-600 mt-1.5">Leads matching these zips will auto-transfer to this recruiter on save.</p>
               </div>
-
-              <div className="p-6 border-t border-army-gold/20 bg-army-gold/5">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-zinc-900/50 border border-zinc-800">
-                    <p className="text-[8px] font-black text-zinc-600 uppercase mb-1 font-mono">Total_Interactions</p>
-                    <p className="text-xl font-black text-army-gold italic">{journeyLead.interactions?.length || 0}</p>
-                  </div>
-                  <div className="p-3 bg-zinc-900/50 border border-zinc-800">
-                    <p className="text-[8px] font-black text-zinc-600 uppercase mb-1 font-mono">Lead_Source</p>
-                    <p className="text-xl font-black text-white italic">{journeyLead.source}</p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+              <div className="flex justify-between items-center mt-4 pt-4 border-t border-zinc-800"><button type="button" onClick={()=>handleDeleteMember(editingMember.uid, editingMember.email)} className="text-red-500 font-black text-[10px] uppercase"><Trash2 className="w-3 h-3 inline mr-1"/>Revoke Access</button><div className="flex gap-2"><button type="button" onClick={()=>setEditingMember(null)} className="px-4 py-2 font-black uppercase text-[10px] text-zinc-500">Cancel</button><button type="submit" className="px-4 py-2 font-black uppercase text-[10px] bg-army-gold text-black">Update</button></div></div>
+            </form>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Create Recruiter Modal */}
-        {showCreateRecruiter && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowCreateRecruiter(false)}
-              className="absolute inset-0 bg-army-black/90 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md hud-border bg-zinc-950 overflow-hidden flex flex-col"
-            >
-              <div className="p-6 border-b border-army-gold/20 bg-army-gold/5 flex justify-between items-center">
-                <div>
-                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-army-gold">Create_Recruiter</h3>
-                  <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Add_New_Team_Member</p>
-                </div>
-                <button 
-                  onClick={() => setShowCreateRecruiter(false)}
-                  className="p-2 hover:bg-army-gold/10 text-zinc-500 hover:text-army-gold transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="p-6">
-                <form onSubmit={handleCreateRecruiter} className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Email_Address</label>
-                    <input 
-                      type="email" 
-                      required
-                      value={createRecruiterEmail}
-                      onChange={(e) => setCreateRecruiterEmail(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white font-mono text-sm focus:border-army-gold outline-none transition-colors"
-                      placeholder="recruiter@example.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Display_Name</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={createRecruiterName}
-                      onChange={(e) => setCreateRecruiterName(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white font-mono text-sm focus:border-army-gold outline-none transition-colors"
-                      placeholder="SGT Smith"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Role</label>
-                    <select 
-                      value={createRecruiterRole}
-                      onChange={(e) => setCreateRecruiterRole(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white font-mono text-sm focus:border-army-gold outline-none transition-colors"
-                    >
-                      <option value="recruiter">Recruiter</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Personal_Link_Slug</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={createRecruiterSlug}
-                      onChange={(e) => setCreateRecruiterSlug(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white font-mono text-sm focus:border-army-gold outline-none transition-colors"
-                      placeholder="sgt-smith"
-                    />
-                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">Link will be: ?r={createRecruiterSlug || 'slug'}</p>
-                  </div>
-                  
-                  <div className="pt-4 flex justify-end gap-3">
-                    <button 
-                      type="button"
-                      onClick={() => setShowCreateRecruiter(false)}
-                      className="px-6 py-3 border border-zinc-800 text-zinc-500 font-black uppercase tracking-widest hover:bg-zinc-900 hover:text-white transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit"
-                      className="px-6 py-3 bg-army-gold/10 border border-army-gold/50 text-army-gold font-black uppercase tracking-widest hover:bg-army-gold hover:text-army-black transition-colors"
-                    >
-                      Pre-Approve
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </motion.div>
+      {/* CSV Upload Modal */}
+      {showCSVModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
+          <div className="hud-border bg-zinc-950 w-full max-w-sm p-6">
+            <div className="flex justify-between mb-6"><h3 className="text-xl font-black text-army-gold uppercase">Import CSV</h3><button onClick={()=>setShowCSVModal(false)}><X className="text-zinc-500 hover:text-white"/></button></div>
+            <label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Assign Leads To:</label>
+            <select value={csvAssignee} onChange={e=>setCsvAssignee(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white mb-4"><option value="">-- Select --</option>{team.map(t=><option key={t.uid} value={t.uid}>{t.displayName}</option>)}</select>
+            <button onClick={()=>{if(!csvAssignee){alert("Select recruiter");return;} fileInputRef.current?.click();}} className="w-full bg-army-gold text-black py-3 font-black uppercase text-[10px]"><Upload className="w-3 h-3 inline mr-2"/>Select File</button>
           </div>
-        )}
-        {/* Edit Member Modal */}
-        {editingMember && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setEditingMember(null)}
-              className="absolute inset-0 bg-army-black/90 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md hud-border bg-zinc-950 overflow-hidden flex flex-col"
-            >
-              <div className="p-6 border-b border-army-gold/20 bg-army-gold/5 flex justify-between items-center">
-                <div>
-                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-army-gold">Edit_Recruiter</h3>
-                  <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{editingMember.displayName}</p>
-                </div>
-                <button 
-                  onClick={() => setEditingMember(null)}
-                  className="p-2 hover:bg-army-gold/10 text-zinc-500 hover:text-army-gold transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+        </div>
+      )}
 
-              <form onSubmit={handleUpdateMember} className="p-6 space-y-4">
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
+          <div className="hud-border bg-zinc-950 w-full max-w-sm p-8 text-center border-red-500/30">
+            <ShieldAlert className="w-12 h-12 text-red-500 mx-auto mb-6" />
+            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-white mb-2">Confirm_Logout</h3>
+            <div className="flex gap-4 mt-8">
+              <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 border border-zinc-800 text-zinc-400 font-black uppercase text-xs hover:bg-zinc-900">Cancel</button>
+              <button onClick={handleLogout} className="flex-1 py-3 bg-red-600 text-white font-black uppercase text-xs hover:bg-red-700">Logout</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Settings Modal */}
+      {showProfileModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
+          <div className="hud-border bg-zinc-950 w-full max-w-4xl flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-army-gold/20 bg-army-gold/5 flex justify-between items-center">
+              <h3 className="text-xl font-black uppercase italic tracking-tighter text-army-gold">Profile_Settings</h3>
+              <div className="flex items-center gap-4">
+                {userSlug && <a href={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(window.location.origin + '/meet?r=' + userSlug)}`} download target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1 bg-army-gold/10 text-army-gold text-[10px] font-black uppercase"><QrCode className="w-4 h-4" /> Download_QR</a>}
+                <button onClick={() => setShowProfileModal(false)}><X className="text-zinc-500 hover:text-white" /></button>
+              </div>
+            </div>
+            <div className="overflow-y-auto p-6 flex-1 scrollbar-hide">
+              <form onSubmit={handleSaveProfile} className="space-y-6">
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Role</label>
-                  <select
-                    value={editingMember.role || 'recruiter'}
-                    onChange={(e) => setEditingMember({ ...editingMember, role: e.target.value })}
-                    className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white font-mono text-sm focus:border-army-gold outline-none transition-colors"
-                  >
-                    <option value="recruiter">Recruiter</option>
-                    <option value="admin">Admin</option>
-                  </select>
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-4 border-b border-zinc-800 pb-2">Profile Photo</h4>
+                  <div className="flex items-center gap-6 mb-6">
+                    <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-army-gold/40 bg-zinc-900 flex items-center justify-center flex-shrink-0">
+                      {profileData.photoURL ? <img src={profileData.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Users className="w-8 h-8 text-zinc-600" />}
+                    </div>
+                    <div>
+                      <label className="px-4 py-2 bg-army-gold/10 border border-army-gold/30 text-army-gold text-[10px] font-black uppercase cursor-pointer hover:bg-army-gold/20 transition-colors inline-flex items-center gap-2">
+                        {isUploadingPhoto ? <><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</> : <><Upload className="w-3 h-3" /> Upload Photo</>}
+                        <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) handlePhotoUpload(e.target.files[0]); }} disabled={isUploadingPhoto} />
+                      </label>
+                      <p className="text-[9px] text-zinc-600 mt-2">Shows on your landing page and Meet Your Recruiter page</p>
+                    </div>
+                  </div>
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-4 border-b border-zinc-800 pb-2">Personal Info</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Rank</label><input type="text" value={profileData.rank} onChange={e=>setProfileData({...profileData, rank: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">First Name</label><input type="text" value={profileData.firstName} onChange={e=>setProfileData({...profileData, firstName: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Last Name</label><input type="text" value={profileData.lastName} onChange={e=>setProfileData({...profileData, lastName: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                  </div>
+                  <div className="mt-4">
+                    <label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Your Slug (URL Link)</label>
+                    <input type="text" value={profileData.slug} onChange={e=>setProfileData({...profileData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none" placeholder="e.g. lantigua"/>
+                    <p className="text-[9px] text-zinc-500 mt-1">Your public link: <span className="text-army-gold">guardlink.site/?r={profileData.slug || '...'}</span></p>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Personal Link Slug</label>
-                  <input
-                    type="text"
-                    value={editingMember.slug || ''}
-                    onChange={(e) => setEditingMember({ ...editingMember, slug: e.target.value })}
-                    placeholder="e.g. smith-j"
-                    className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white font-mono text-sm focus:border-army-gold outline-none transition-colors"
-                  />
-                  <p className="text-[10px] text-zinc-500 mt-1 font-mono">This will be used for their personal link: /?r=slug</p>
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-4 border-b border-zinc-800 pb-2">Contact Methods</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Cell</label><input type="text" value={profileData.cellPhone} onChange={e=>setProfileData({...profileData, cellPhone: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Office</label><input type="text" value={profileData.officePhone} onChange={e=>setProfileData({...profileData, officePhone: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Ext</label><input type="text" value={profileData.officeExt} onChange={e=>setProfileData({...profileData, officeExt: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Email</label><input type="text" value={profileData.publicEmail} onChange={e=>setProfileData({...profileData, publicEmail: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                  </div>
                 </div>
-                <div className="flex justify-end gap-4 mt-6">
-                  <button 
-                    type="button"
-                    onClick={() => setEditingMember(null)}
-                    className="px-6 py-3 border border-zinc-800 text-zinc-400 font-black uppercase tracking-widest hover:bg-zinc-800 hover:text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit"
-                    className="px-6 py-3 bg-army-gold/10 border border-army-gold/50 text-army-gold font-black uppercase tracking-widest hover:bg-army-gold hover:text-army-black transition-colors"
-                  >
-                    Save_Changes
-                  </button>
+                <div>
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-4 border-b border-zinc-800 pb-2">Location</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Address</label><input type="text" value={profileData.address1} onChange={e=>setProfileData({...profileData, address1: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">City</label><input type="text" value={profileData.city} onChange={e=>setProfileData({...profileData, city: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Zip</label><input type="text" value={profileData.zip} onChange={e=>setProfileData({...profileData, zip: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                  </div>
                 </div>
+                <div>
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-4 border-b border-zinc-800 pb-2">Social Links</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block flex items-center gap-1"><Instagram className="w-3 h-3"/>Instagram</label><input type="text" value={profileData.instagram} onChange={e=>setProfileData({...profileData, instagram: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block flex items-center gap-1"><Facebook className="w-3 h-3"/>Facebook</label><input type="text" value={profileData.facebook} onChange={e=>setProfileData({...profileData, facebook: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block flex items-center gap-1"><Linkedin className="w-3 h-3"/>LinkedIn</label><input type="text" value={profileData.linkedin} onChange={e=>setProfileData({...profileData, linkedin: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block flex items-center gap-1"><Youtube className="w-3 h-3"/>YouTube</label><input type="text" value={profileData.youtube} onChange={e=>setProfileData({...profileData, youtube: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block flex items-center gap-1"><LinkIcon className="w-3 h-3"/>Linktree</label><input type="text" value={profileData.linktree} onChange={e=>setProfileData({...profileData, linktree: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">TikTok</label><input type="text" value={profileData.tiktok} onChange={e=>setProfileData({...profileData, tiktok: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-4 border-b border-zinc-800 pb-2">Meet Your Recruiter — Questionnaire</h4>
+                  <p className="text-[9px] text-zinc-500 mb-3">These answers show on your public "Meet Your Recruiter" page. Share your link: <span className="text-army-gold">{userSlug ? `guardlink.site/meet?r=${userSlug}` : 'Set your slug first'}</span></p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Why did you join the Guard?</label><textarea value={profileData.whyJoined} onChange={e=>setProfileData({...profileData, whyJoined: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none h-20 text-xs" placeholder="I joined because..."/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">What's your civilian career?</label><textarea value={profileData.civilianCareer} onChange={e=>setProfileData({...profileData, civilianCareer: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none h-20 text-xs" placeholder="Outside the Guard, I work as..."/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">What do you like most about serving?</label><textarea value={profileData.favoritePartOfServing} onChange={e=>setProfileData({...profileData, favoritePartOfServing: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none h-20 text-xs" placeholder="My favorite part is..."/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Favorite hobbies?</label><textarea value={profileData.favoriteHobbies} onChange={e=>setProfileData({...profileData, favoriteHobbies: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none h-20 text-xs" placeholder="When I'm off duty, I enjoy..."/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Favorite place you've traveled?</label><textarea value={profileData.favoriteTravelPlace} onChange={e=>setProfileData({...profileData, favoriteTravelPlace: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none h-20 text-xs" placeholder="The best place I've been is..."/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block">Message to future soldiers</label><textarea value={profileData.messageToProspects} onChange={e=>setProfileData({...profileData, messageToProspects: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none h-20 text-xs" placeholder="If you're thinking about joining..."/></div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-4 border-b border-zinc-800 pb-2">Quick-Comms Templates</h4>
+                  <p className="text-[9px] text-zinc-500 mb-3">Use <span className="text-army-gold">{'{{name}}'}</span> for lead name and <span className="text-army-gold">{'{{recruiter}}'}</span> for your name.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block flex items-center gap-1"><MessageSquare className="w-3 h-3"/>SMS Template</label><textarea value={profileData.smsTemplate} onChange={e=>setProfileData({...profileData, smsTemplate: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none h-24 text-xs" placeholder="Hey {{name}}, this is {{recruiter}}..."/></div>
+                    <div><label className="text-[10px] text-army-gold font-black uppercase mb-1 block flex items-center gap-1"><Mail className="w-3 h-3"/>Email Template</label><textarea value={profileData.emailTemplate} onChange={e=>setProfileData({...profileData, emailTemplate: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none h-24 text-xs" placeholder="Hello {{name}},\n\nThank you for..."/></div>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-800"><button type="button" onClick={()=>setShowProfileModal(false)} className="px-4 py-2 font-black uppercase text-[10px] text-zinc-500">Cancel</button><button type="submit" className="px-4 py-2 font-black uppercase text-[10px] bg-army-gold text-black">Save</button></div>
               </form>
-            </motion.div>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Add Manual Lead Modal */}
+      {showAddLeadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
+          <div className="hud-border bg-zinc-950 w-full max-w-md p-6">
+            <div className="flex justify-between mb-6"><h3 className="text-xl font-black text-army-gold uppercase">Add Record</h3><button onClick={()=>setShowAddLeadModal(false)}><X className="text-zinc-500 hover:text-white"/></button></div>
+            <form onSubmit={handleManualAddLead} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">First Name</label><input type="text" required value={newLeadData.firstName} onChange={e=>setNewLeadData({...newLeadData, firstName: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Last Name</label><input type="text" required value={newLeadData.lastName} onChange={e=>setNewLeadData({...newLeadData, lastName: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Phone</label><input type="tel" required value={newLeadData.phone} onChange={e=>setNewLeadData({...newLeadData, phone: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Email</label><input type="email" required value={newLeadData.email} onChange={e=>setNewLeadData({...newLeadData, email: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+              </div>
+              {activeTab === 'leads' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Age</label><input type="text" value={newLeadData.age} onChange={e=>setNewLeadData({...newLeadData, age: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                  <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Source</label><input type="text" value={newLeadData.source} onChange={e=>setNewLeadData({...newLeadData, source: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                  <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">MOS</label><input type="text" value={newLeadData.mos} onChange={e=>setNewLeadData({...newLeadData, mos: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"/></div>
+                  <div><label className="text-[10px] font-black uppercase text-zinc-500 mb-1 block">Interest</label><select value={newLeadData.interest} onChange={e=>setNewLeadData({...newLeadData, interest: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"><option value="Enlisted">Enlisted</option><option value="Officer">Officer</option><option value="Warrant">Warrant</option></select></div>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-800"><button type="button" onClick={()=>setShowAddLeadModal(false)} className="px-4 py-2 font-black uppercase text-[10px] text-zinc-500">Cancel</button><button type="submit" className="px-4 py-2 font-black uppercase text-[10px] bg-army-gold text-black">Add</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Lead Modal */}
+      {editingLead && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
+          <div className="hud-border bg-zinc-950 w-full max-w-2xl flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-army-gold/20 bg-army-gold/5 flex justify-between items-center"><h3 className="text-xl font-black uppercase italic text-army-gold">Edit_Intel_Record</h3><button onClick={() => setEditingLead(null)}><X className="text-zinc-500 hover:text-white"/></button></div>
+            <div className="overflow-y-auto scrollbar-hide flex-1">
+              <form onSubmit={handleUpdateLead} className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-[10px] font-black uppercase text-army-gold mb-1">First Name</label><input type="text" value={editingLead.firstName} onChange={e => setEditingLead({...editingLead, firstName: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none" required /></div>
+                  <div><label className="block text-[10px] font-black uppercase text-army-gold mb-1">Last Name</label><input type="text" value={editingLead.lastName} onChange={e => setEditingLead({...editingLead, lastName: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none" required /></div>
+                  <div><label className="block text-[10px] font-black uppercase text-army-gold mb-1">Phone</label><input type="tel" value={editingLead.phone} onChange={e => setEditingLead({...editingLead, phone: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none" required /></div>
+                  <div><label className="block text-[10px] font-black uppercase text-army-gold mb-1">Email</label><input type="email" value={editingLead.email} onChange={e => setEditingLead({...editingLead, email: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none" required /></div>
+                  <div><label className="block text-[10px] font-black uppercase text-army-gold mb-1">Status</label><select value={editingLead.status} onChange={e => setEditingLead({...editingLead, status: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none">{LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                  <div><label className="block text-[10px] font-black uppercase text-army-gold mb-1">Target MOS</label><input type="text" value={editingLead.mos} onChange={e => setEditingLead({...editingLead, mos: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none" /></div>
+                  {/* Commander & Admin: Assign to Platoon */}
+                  {(isCommander || userRole === 'admin') && (
+                    <div><label className="block text-[10px] font-black uppercase text-neon-green mb-1">Assign to Team</label><select value={editingLead.platoon || 'HQ'} onChange={e => setEditingLead({...editingLead, platoon: e.target.value, _platoonManuallySet: true} as any)} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none">
+                      {(isCommander ? PLATOONS : userPlatoons).map(p => <option key={p} value={p}>{p}</option>)}
+                    </select></div>
+                  )}
+                  {/* Reassign to Recruiter — Commander sees all, Admin sees own platoon, Recruiter sees nothing */}
+                  {(isCommander || userRole === 'admin') && (
+                    <div><label className="block text-[10px] font-black uppercase text-neon-cyan mb-1">Reassign to Recruiter</label><select value={editingLead.recruiterId || ''} onChange={e => { const r = team.find(t => t.uid === e.target.value); setEditingLead({...editingLead, recruiterId: e.target.value, recruiterName: r?.displayName || ''} as any); }} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none"><option value="">-- Unassigned --</option>
+                      {(isCommander ? team : team.filter(m => (m.platoons || []).some((p: string) => userPlatoons.includes(p)))).map(m => <option key={m.uid} value={m.uid}>{m.displayName} ({(m.platoons||[]).join(', ')})</option>)}
+                    </select></div>
+                  )}
+                  <div><label className="block text-[10px] font-black uppercase text-army-gold mb-1">Follow-Up Date</label><input type="date" value={(editingLead as any).followUpDate || ''} onChange={e => setEditingLead({...editingLead, followUpDate: e.target.value} as any)} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-white outline-none" /></div>
+                </div>
+                <div className="border-t border-zinc-800 pt-4">
+                  <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-2">// Recruiter_Notes</h4>
+                  <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-2">
+                    {((editingLead as any).notes || []).map((n: any, i: number) => (<div key={i} className="bg-zinc-900 p-2 border-l-2 border-army-gold"><p className="text-xs text-white">{n.text}</p><div className="flex justify-between mt-1"><span className="text-[8px] text-zinc-500">{n.author}</span><span className="text-[8px] text-zinc-500">{new Date(n.timestamp).toLocaleDateString()}</span></div></div>))}
+                  </div>
+                  <div className="flex gap-2"><input type="text" value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Add note..." className="flex-1 bg-zinc-900 border border-zinc-800 p-2 text-white outline-none text-xs" /><button type="button" onClick={handleAddNote} className="px-4 bg-army-gold/10 text-army-gold text-[10px] font-black uppercase">Add</button></div>
+                </div>
+                <div className="pt-4 flex justify-between items-center border-t border-zinc-800"><button type="button" onClick={() => handleDeleteLead((editingLead as any).id, 'lead')} className="text-red-500 text-[10px] font-black uppercase"><Trash2 className="w-4 h-4 inline mr-1"/> Delete</button><div className="flex gap-2"><button type="button" onClick={() => setEditingLead(null)} className="px-4 py-2 text-zinc-400 text-[10px] font-black uppercase">Cancel</button><button type="submit" className="px-4 py-2 bg-army-gold text-black text-[10px] font-black uppercase">Save</button></div></div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Subscription Modal */}
+      {editingSub && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
+          <div className="hud-border bg-zinc-950 w-full max-w-md p-6">
+            <div className="flex justify-between mb-6"><h3 className="text-xl font-black text-army-gold uppercase">Edit_Subscriber</h3><button onClick={() => setEditingSub(null)}><X className="text-zinc-500 hover:text-white"/></button></div>
+            <form onSubmit={handleUpdateSub} className="space-y-4">
+              <div><label className="text-[10px] font-black uppercase text-army-gold mb-1 block">Name</label><input type="text" value={editingSub.name} onChange={e => setEditingSub({...editingSub, name: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold" required /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="text-[10px] font-black uppercase text-army-gold mb-1 block">Phone</label><input type="tel" value={editingSub.phone} onChange={e => setEditingSub({...editingSub, phone: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold" /></div>
+                <div><label className="text-[10px] font-black uppercase text-army-gold mb-1 block">Email</label><input type="email" value={editingSub.email} onChange={e => setEditingSub({...editingSub, email: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold" required /></div>
+              </div>
+              <div><label className="text-[10px] font-black uppercase text-army-gold mb-1 block">Status</label><select value={editingSub.status || 'New'} onChange={e => setEditingSub({...editingSub, status: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none">{LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+              <div className="flex justify-between items-center mt-4 pt-4 border-t border-zinc-800">
+                <button type="button" onClick={() => handleDeleteLead((editingSub as any).id, 'sub')} className="text-red-500 text-[10px] font-black uppercase"><Trash2 className="w-4 h-4 inline mr-1"/> Delete</button>
+                <div className="flex gap-2"><button type="button" onClick={() => setEditingSub(null)} className="px-4 py-2 text-zinc-400 text-[10px] font-black uppercase">Cancel</button><button type="submit" className="px-4 py-2 bg-army-gold text-black text-[10px] font-black uppercase">Save</button></div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* User Journey Modal */}
+      {journeyLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
+          <div className="hud-border bg-zinc-950 w-full max-w-md flex flex-col max-h-[80vh]">
+            <div className="p-6 border-b border-army-gold/20 bg-army-gold/5 flex justify-between items-center"><h3 className="text-xl font-black text-army-gold uppercase">Intel_Log</h3><button onClick={() => setJourneyLead(null)}><X className="text-zinc-500 hover:text-white"/></button></div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {journeyLead.interactions && journeyLead.interactions.length > 0 ? journeyLead.interactions.map((int, i) => (
+                <div key={i} className="flex gap-4 items-start"><div className="w-2 h-2 rounded-full bg-army-gold mt-1" /><div className="flex-1"><div className="flex justify-between"><p className="text-[10px] font-black text-white">{int.element}</p><p className="text-[8px] text-zinc-500">{new Date(int.timestamp).toLocaleTimeString()}</p></div><p className="text-[9px] text-zinc-500 uppercase">{int.type}</p></div></div>
+              )) : <div className="text-center text-zinc-500 py-8 font-black uppercase text-[10px]">No Interaction Data</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fixed Call/Text/Email */}
+      <FloatingCTA slugParam="" />
+
+      {/* Mini-Game Launcher Icon */}
+      <button
+        onClick={() => setShowGame(true)}
+        className="fixed bottom-36 right-8 z-30 group"
+        title="Play Basic Training"
+      >
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-neon-cyan/20 to-army-black border-2 border-neon-cyan/40 flex items-center justify-center hover:border-neon-cyan hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="group-hover:scale-110 transition-transform">
+            <path d="M3 4h14l-2 12H5L3 4z" stroke="#00f2ff" strokeWidth="1.5" fill="none"/>
+            <circle cx="7" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
+            <circle cx="13" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
+            <path d="M10 2v3" stroke="#00f2ff" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </div>
+      </button>
+
+      <AnimatePresence>
+        {showGame && (
+          <BasicTrainingGame
+            onClose={() => setShowGame(false)}
+            onGameComplete={(score) => {
+              window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-play' } }));
+              if (score >= 1500) {
+                window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-highscore' } }));
+              }
+            }}
+          />
         )}
       </AnimatePresence>
+
+      {/* Shared AI Chatbot */}
+      <SharedChatbot slugParam="" />
+
+      {/* Footer */}
+      <SharedFooter slugParam="" />
+
     </div>
   );
 };

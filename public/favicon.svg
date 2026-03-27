@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#D4A84B" />
+      <stop offset="50%" style="stop-color:#F0C75E" />
+      <stop offset="100%" style="stop-color:#D4A84B" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1a" />
+      <stop offset="100%" style="stop-color:#0d0d0d" />
+    </linearGradient>
+  </defs>
+
+  <!-- Dark rounded square background -->
+  <rect width="120" height="120" rx="20" ry="20" fill="url(#bgGrad)" />
+  <rect x="2" y="2" width="116" height="116" rx="18" ry="18"
+        fill="none" stroke="url(#gold)" stroke-width="3" />
+
+  <!-- Double chevron -->
+  <path d="M60 25 L85 55 L77 55 L60 35 L43 55 L35 55 Z" fill="url(#gold)" />
+  <path d="M60 50 L85 80 L77 80 L60 60 L43 80 L35 80 Z" fill="url(#gold)" opacity="0.5" />
+
+  <!-- GL letters -->
+  <text x="60" y="108" font-family="'Bebas Neue', 'Impact', 'Arial Black', sans-serif"
+        font-size="24" font-weight="900" letter-spacing="4" fill="url(#gold)"
+        text-anchor="middle">GL</text>
+</svg>

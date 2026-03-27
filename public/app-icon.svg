@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#D4A84B" />
+      <stop offset="50%" style="stop-color:#F0C75E" />
+      <stop offset="100%" style="stop-color:#D4A84B" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1a" />
+      <stop offset="100%" style="stop-color:#0a0a0a" />
+    </linearGradient>
+  </defs>
+
+  <!-- Dark rounded square background -->
+  <rect width="512" height="512" rx="90" ry="90" fill="url(#bgGrad)" />
+  <rect x="6" y="6" width="500" height="500" rx="84" ry="84"
+        fill="none" stroke="url(#gold)" stroke-width="6" />
+
+  <!-- Double chevron - main icon -->
+  <path d="M256 100 L370 230 L340 230 L256 135 L172 230 L142 230 Z" fill="url(#gold)" />
+  <path d="M256 200 L370 330 L340 330 L256 235 L172 330 L142 330 Z" fill="url(#gold)" opacity="0.45" />
+
+  <!-- GUARDLINK text -->
+  <text x="256" y="410" font-family="'Bebas Neue', 'Impact', 'Arial Black', sans-serif"
+        font-size="62" font-weight="900" letter-spacing="8"
+        text-anchor="middle">
+    <tspan fill="#FFFFFF">GUARD</tspan><tspan fill="url(#gold)">LINK</tspan>
+  </text>
+
+  <!-- Subtle tagline -->
+  <text x="256" y="448" font-family="'Montserrat', 'Arial', sans-serif"
+        font-size="18" font-weight="600" letter-spacing="6" fill="#D4A84B"
+        text-anchor="middle" opacity="0.5">LEVEL UP YOUR FUTURE.</text>
+</svg>
