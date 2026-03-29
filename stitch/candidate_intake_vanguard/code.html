@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VANGUARD_CRM // CANDIDATE_ONBOARDING</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .bg-vanguard-gradient {
+            background: linear-gradient(135deg, #fff4dc 0%, #ffd530 100%);
+        }
+        .glass-panel {
+            background: rgba(52, 52, 59, 0.4);
+            backdrop-filter: blur(12px);
+        }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #121319; }
+        ::-webkit-scrollbar-thumb { background: #4d4633; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-error-container": "#ffdad6",
+                        "on-primary": "#3b2f00",
+                        "on-secondary-container": "#b4b4bd",
+                        "surface-bright": "#38393f",
+                        "secondary": "#c6c6cf",
+                        "on-primary-fixed-variant": "#564500",
+                        "surface-variant": "#34343b",
+                        "surface-dim": "#121319",
+                        "inverse-surface": "#e3e1ea",
+                        "on-tertiary": "#303037",
+                        "on-secondary-fixed": "#1a1b22",
+                        "on-surface-variant": "#d0c6ac",
+                        "tertiary-fixed": "#e3e1ea",
+                        "outline": "#999079",
+                        "error": "#ffb4ab",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed": "#1b1b21",
+                        "surface-container-lowest": "#0d0e14",
+                        "surface-container": "#1f1f25",
+                        "secondary-container": "#45464e",
+                        "inverse-primary": "#715c00",
+                        "surface": "#121319",
+                        "on-secondary": "#2f3037",
+                        "surface-container-low": "#1b1b21",
+                        "tertiary-fixed-dim": "#c7c5ce",
+                        "primary-fixed": "#ffe17c",
+                        "on-secondary-fixed-variant": "#45464e",
+                        "surface-tint": "#ebc318",
+                        "background": "#121319",
+                        "outline-variant": "#4d4633",
+                        "secondary-fixed": "#e2e1eb",
+                        "surface-container-highest": "#34343b",
+                        "on-primary-fixed": "#231b00",
+                        "on-tertiary-container": "#5e5d65",
+                        "secondary-fixed-dim": "#c6c6cf",
+                        "on-primary-container": "#715c00",
+                        "primary-fixed-dim": "#ebc318",
+                        "primary": "#fff4dc",
+                        "inverse-on-surface": "#303037",
+                        "on-tertiary-fixed-variant": "#46464d",
+                        "tertiary-container": "#d9d7e0",
+                        "on-background": "#e3e1ea",
+                        "surface-container-high": "#292930",
+                        "tertiary": "#f6f4fd",
+                        "primary-container": "#ffd530",
+                        "on-surface": "#e3e1ea",
+                        "on-error": "#690005"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Space Grotesk"],
+                        "label": ["Space Grotesk"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar Implementation -->
+<header class="flex justify-between items-center w-full px-6 py-3 sticky top-0 z-50 bg-[#121319] dark:bg-[#121319]">
+<div class="flex items-center gap-6">
+<span class="text-xl font-black tracking-tighter text-[#FFD530] uppercase font-['Space_Grotesk']">VANGUARD_CRM</span>
+<div class="hidden md:flex gap-4 font-['Space_Grotesk'] tracking-tight uppercase text-xs">
+<a class="text-[#FFD530] border-b-2 border-[#FFD530] py-1" href="#">Onboarding</a>
+<a class="text-[#d0c6ac] hover:bg-[#34343b] transition-colors duration-100 py-1 px-2" href="#">Compliance</a>
+<a class="text-[#d0c6ac] hover:bg-[#34343b] transition-colors duration-100 py-1 px-2" href="#">Support</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex gap-2">
+<button class="p-2 text-[#d0c6ac] hover:bg-[#34343b] transition-colors duration-100 active:scale-95">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+</button>
+<button class="p-2 text-[#d0c6ac] hover:bg-[#34343b] transition-colors duration-100 active:scale-95">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-[#d0c6ac] hover:bg-[#34343b] transition-colors duration-100 active:scale-95">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+</div>
+<div class="w-8 h-8 rounded-none overflow-hidden bg-surface-container-high border border-outline-variant/20">
+<img alt="Recruiter Profile" class="w-full h-full object-cover grayscale contrast-125" data-alt="Close up portrait of a professional male recruiter in a dark suit with neutral studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC089yTHycLrHluQVU6Ee1SuFLu9YMY02qVzfzp8oEN5AsoMNm7J7xge9qUysB2z76HTxGuE4bGD2OMv3UHj6et7LATnfwZGMYkd_daY_HQ72iDCcxzHjFWPICLYny6-R2UyiSihlFy89W-SR1mg8qJsjIPKkruqDU22yETo2nomIeCsOAKEinbs1uQ11C-iO2taVL5muOIWwGFsUnXZ2lJNcYTz3cObb0IkKFuISnuP0SjntR3j25U6flTMw_DWXLS55ZQiDfW7NRg"/>
+</div>
+</div>
+</header>
+<div class="flex min-h-screen">
+<!-- SideNavBar Implementation (Suppressed on transactional flow but kept for shell reference as requested) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col z-40 bg-[#1b1b21] dark:bg-[#1b1b21] rounded-none w-64 border-r border-outline-variant/10 hidden lg:flex">
+<div class="p-6">
+<h2 class="font-['Space_Grotesk'] font-bold text-[#FFD530] text-xl">RECRUIT_OPS</h2>
+<p class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-[#d0c6ac] opacity-60">V0.42_STABLE</p>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<div class="font-['JetBrains_Mono'] text-xs uppercase tracking-widest px-3 py-4 text-[#d0c6ac]/40">Primary_Ops</div>
+<a class="flex items-center gap-3 px-4 py-3 bg-[#FFD530] text-[#121319] font-bold border-r-4 border-[#fff4dc] font-['JetBrains_Mono'] text-xs uppercase tracking-widest" href="#">
+<span class="material-symbols-outlined" data-icon="AccountTree">account_tree</span>
+                    Pipeline
+                </a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#d0c6ac] hover:bg-[#34343b] hover:text-[#FFD530] transition-transform duration-100 Hover:translate-x-1 font-['JetBrains_Mono'] text-xs uppercase tracking-widest" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+                    Candidates
+                </a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#d0c6ac] hover:bg-[#34343b] hover:text-[#FFD530] transition-transform duration-100 Hover:translate-x-1 font-['JetBrains_Mono'] text-xs uppercase tracking-widest" href="#">
+<span class="material-symbols-outlined" data-icon="business">business</span>
+                    Clients
+                </a>
+</nav>
+<div class="p-4 mt-auto border-t border-outline-variant/10">
+<button class="w-full py-3 bg-vanguard-gradient text-on-primary-fixed font-bold font-['JetBrains_Mono'] text-xs tracking-tighter uppercase rounded-sm hover:brightness-110 active:scale-[0.98] transition-all">
+                    NEW_PLACEMENT
+                </button>
+<div class="mt-4 space-y-2">
+<a class="flex items-center gap-2 px-2 text-[#d0c6ac] font-['JetBrains_Mono'] text-[10px] uppercase hover:text-[#FFD530]" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="help_center">help_center</span> Support
+                    </a>
+<a class="flex items-center gap-2 px-2 text-[#d0c6ac] font-['JetBrains_Mono'] text-[10px] uppercase hover:text-[#FFD530]" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="terminal">terminal</span> System_Logs
+                    </a>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 lg:ml-64 p-4 md:p-8 lg:p-12 max-w-7xl mx-auto w-full">
+<!-- Tactical HUD Header -->
+<section class="mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+<div class="space-y-2">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-primary-container animate-pulse"></span>
+<span class="font-['JetBrains_Mono'] text-xs text-primary-container tracking-[0.2em] uppercase">SECURE_ONBOARDING_INITIALIZED</span>
+</div>
+<h1 class="text-5xl md:text-7xl font-black font-headline tracking-tighter uppercase text-on-surface leading-none">
+                        CANDIDATE<br/><span class="text-primary-container">INTAKE_PORTAL</span>
+</h1>
+</div>
+<div class="glass-panel p-4 border-l-4 border-primary-container">
+<div class="flex items-center gap-4">
+<div class="text-right">
+<p class="font-['JetBrains_Mono'] text-[10px] uppercase text-on-surface-variant">Encryption_Status</p>
+<p class="font-['JetBrains_Mono'] text-lg font-bold text-primary-container">AES_256_ACTIVE</p>
+</div>
+<span class="material-symbols-outlined text-4xl text-primary-container" data-icon="verified_user">verified_user</span>
+</div>
+</div>
+</section>
+<!-- Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Section 1: Account Verification (Asymmetric Narrow) -->
+<div class="lg:col-span-4 space-y-8">
+<div class="bg-surface-container-low p-6 relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-16 h-16 bg-primary-container/10 rotate-45 translate-x-8 -translate-y-8"></div>
+<div class="flex items-center justify-between mb-8">
+<span class="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-primary-container">[ 01_AUTH ]</span>
+<span class="material-symbols-outlined text-on-surface-variant opacity-50" data-icon="key">key</span>
+</div>
+<h3 class="font-headline font-bold text-2xl uppercase mb-6 tracking-tight">Account_Verification</h3>
+<form class="space-y-6">
+<div class="space-y-2">
+<label class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant">Email_Address</label>
+<div class="bg-surface-container-lowest h-12 flex items-center px-4 relative group">
+<input class="bg-transparent border-none w-full focus:ring-0 text-primary font-['JetBrains_Mono'] placeholder:text-on-surface-variant/20 uppercase text-xs" placeholder="CANDIDATE@VANGUARD.SYS" type="email"/>
+<div class="absolute bottom-0 left-0 w-0 h-[2px] bg-primary group-focus-within:w-full transition-all duration-300"></div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant">Access_Key</label>
+<div class="bg-surface-container-lowest h-12 flex items-center px-4 relative group">
+<input class="bg-transparent border-none w-full focus:ring-0 text-primary font-['JetBrains_Mono'] uppercase text-xs" type="password" value="••••••••••••"/>
+<div class="absolute bottom-0 left-0 w-0 h-[2px] bg-primary group-focus-within:w-full transition-all duration-300"></div>
+</div>
+</div>
+<button class="w-full py-4 bg-surface-container-highest text-primary-container font-bold font-['JetBrains_Mono'] text-xs tracking-widest uppercase hover:bg-primary-container hover:text-on-primary transition-colors duration-200">
+                                VALIDATE_CREDENTIALS
+                            </button>
+</form>
+</div>
+<div class="bg-surface-container-high p-4 flex items-start gap-4 border border-outline-variant/10">
+<span class="material-symbols-outlined text-primary-container" data-icon="info">info</span>
+<div>
+<p class="font-['JetBrains_Mono'] text-[10px] uppercase font-bold text-primary-container mb-1">System_Notice</p>
+<p class="text-xs text-on-surface-variant leading-relaxed">Multi-factor authentication (MFA) will be triggered upon successful primary validation.</p>
+</div>
+</div>
+</div>
+<!-- Section 2: Biometric Data & Vault (Bento Grid Style) -->
+<div class="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+<!-- Biometric Data Profile -->
+<div class="md:col-span-2 bg-surface-container-low p-8 relative">
+<div class="flex items-center justify-between mb-10">
+<div>
+<span class="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-primary-container">[ 02_IDENTITY ]</span>
+<h3 class="font-headline font-bold text-3xl uppercase tracking-tighter mt-2">Biometric_Data_Profile</h3>
+</div>
+<span class="material-symbols-outlined text-4xl text-on-surface-variant/20" data-icon="fingerprint">fingerprint</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<div class="space-y-6">
+<div class="space-y-2">
+<label class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant">Full_Legal_Name</label>
+<div class="bg-surface-container-lowest h-12 flex items-center px-4 relative">
+<input class="bg-transparent border-none w-full focus:ring-0 text-primary font-['JetBrains_Mono'] uppercase text-xs" placeholder="SURNAME, GIVEN" type="text"/>
+<div class="absolute bottom-0 left-0 w-full h-[1px] bg-outline-variant/30"></div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant">Social_Security_Index</label>
+<div class="bg-surface-container-lowest h-12 flex items-center px-4 relative">
+<input class="bg-transparent border-none w-full focus:ring-0 text-primary font-['JetBrains_Mono'] uppercase text-xs" placeholder="000-00-0000" type="text"/>
+<div class="absolute bottom-0 left-0 w-full h-[1px] bg-outline-variant/30"></div>
+</div>
+</div>
+</div>
+<div class="space-y-6">
+<div class="space-y-2">
+<label class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant">Birth_Chronology</label>
+<div class="bg-surface-container-lowest h-12 flex items-center px-4 relative">
+<input class="bg-transparent border-none w-full focus:ring-0 text-primary font-['JetBrains_Mono'] uppercase text-xs [color-scheme:dark]" type="date"/>
+<div class="absolute bottom-0 left-0 w-full h-[1px] bg-outline-variant/30"></div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant">Tax_Jurisdiction</label>
+<select class="bg-surface-container-lowest border-none w-full h-12 focus:ring-0 text-primary font-['JetBrains_Mono'] uppercase text-xs px-4">
+<option>NORTH_AMERICA_US</option>
+<option>EURO_ZONE_UK</option>
+<option>ASIA_PACIFIC_SG</option>
+</select>
+</div>
+</div>
+</div>
+</div>
+<!-- Document Vault -->
+<div class="bg-surface-container-low p-8 flex flex-col">
+<div class="flex items-center gap-3 mb-6">
+<span class="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-primary-container">[ 03_VAULT ]</span>
+<div class="h-px flex-1 bg-outline-variant/20"></div>
+</div>
+<h3 class="font-headline font-bold text-2xl uppercase mb-8 tracking-tight">Document_Vault</h3>
+<div class="space-y-4 flex-1">
+<div class="group cursor-pointer bg-surface-container-lowest p-4 flex items-center justify-between hover:bg-surface-container-highest transition-colors">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary-container" data-icon="description">description</span>
+<div>
+<p class="font-['JetBrains_Mono'] text-[10px] uppercase text-on-surface font-bold">Birth_Certificate</p>
+<p class="font-['JetBrains_Mono'] text-[9px] uppercase text-on-surface-variant">PDF_REQUIRED</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" data-icon="upload_file">upload_file</span>
+</div>
+<div class="group cursor-pointer bg-surface-container-lowest p-4 flex items-center justify-between border-l-2 border-primary-container/40">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary-container" data-icon="badge">badge</span>
+<div>
+<p class="font-['JetBrains_Mono'] text-[10px] uppercase text-on-surface font-bold">SSN_Card_Scan</p>
+<p class="font-['JetBrains_Mono'] text-[9px] uppercase text-on-surface-variant">JPEG_PNG_VALID</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" data-icon="upload_file">upload_file</span>
+</div>
+<div class="group cursor-pointer bg-surface-container-lowest p-4 flex items-center justify-between opacity-50 grayscale">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined" data-icon="home_work">home_work</span>
+<div>
+<p class="font-['JetBrains_Mono'] text-[10px] uppercase text-on-surface font-bold">Proof_Of_Residency</p>
+<p class="font-['JetBrains_Mono'] text-[9px] uppercase text-on-surface-variant">LOCKED_UNTIL_STEP_02</p>
+</div>
+</div>
+<span class="material-symbols-outlined" data-icon="lock">lock</span>
+</div>
+</div>
+</div>
+<!-- Visual Security Indicators -->
+<div class="bg-surface-container-high p-8 flex flex-col justify-between overflow-hidden relative">
+<div class="absolute -right-4 -bottom-4 opacity-5">
+<span class="material-symbols-outlined text-[160px]" data-icon="security" style="font-variation-settings: 'FILL' 1;">security</span>
+</div>
+<div>
+<h4 class="font-['JetBrains_Mono'] text-xs font-bold uppercase text-primary-container mb-4">SECURITY_PROTOCOL_STATS</h4>
+<div class="space-y-6">
+<div class="space-y-2">
+<div class="flex justify-between font-['JetBrains_Mono'] text-[10px] uppercase">
+<span>Encryption_Load</span>
+<span>94%</span>
+</div>
+<div class="h-1 bg-surface-container-lowest w-full">
+<div class="h-full bg-primary-container w-[94%]"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between font-['JetBrains_Mono'] text-[10px] uppercase">
+<span>Packet_Sanitization</span>
+<span>ACTIVE</span>
+</div>
+<div class="h-1 bg-surface-container-lowest w-full">
+<div class="h-full bg-primary-container w-full opacity-50"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-8">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary-container text-sm" data-icon="encrypted">encrypted</span>
+<span class="font-['JetBrains_Mono'] text-[9px] uppercase tracking-widest">End-to-End Vault Encryption</span>
+</div>
+<p class="text-[10px] text-on-surface-variant leading-tight">All assets uploaded to the Document Vault are scrubbed for metadata and stored in a cold-storage enclave.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Action Bar -->
+<div class="mt-12 p-8 bg-surface-container-lowest flex flex-col md:flex-row items-center justify-between border-t border-primary-container/20">
+<div class="flex items-center gap-6 mb-6 md:mb-0">
+<div class="text-center md:text-left">
+<p class="font-['JetBrains_Mono'] text-[10px] uppercase text-on-surface-variant mb-1">Onboarding_Progress</p>
+<div class="flex gap-1">
+<div class="w-8 h-1 bg-primary-container"></div>
+<div class="w-8 h-1 bg-primary-container/30"></div>
+<div class="w-8 h-1 bg-primary-container/10"></div>
+<div class="w-8 h-1 bg-primary-container/10"></div>
+</div>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="px-8 py-3 bg-transparent border border-outline-variant text-[#d0c6ac] font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-widest hover:bg-surface-container-high transition-all">
+                        SAVE_DRAFT
+                    </button>
+<button class="px-12 py-3 bg-vanguard-gradient text-on-primary-fixed font-['JetBrains_Mono'] text-xs font-bold uppercase tracking-widest rounded-sm hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-primary-container/10">
+                        COMMIT_DATA_SCAN
+                    </button>
+</div>
+</div>
+</main>
+</div>
+<!-- Global Footer -->
+<footer class="w-full py-4 px-8 flex flex-col md:flex-row justify-between items-center border-t border-[#4d4633]/15 bg-[#121319] dark:bg-[#121319] gap-4">
+<div class="font-['JetBrains_Mono'] text-[10px] uppercase opacity-60 text-[#d0c6ac]">
+            ©2024 VANGUARD_SYSTEMS // ALL_RIGHTS_RESERVED
+        </div>
+<div class="flex gap-6">
+<a class="font-['JetBrains_Mono'] text-[10px] uppercase opacity-60 text-[#d0c6ac] hover:text-[#FFD530] hover:opacity-100 transition-all" href="#">Documentation</a>
+<a class="font-['JetBrains_Mono'] text-[10px] uppercase opacity-60 text-[#d0c6ac] hover:text-[#FFD530] hover:opacity-100 transition-all" href="#">Privacy_Protocol</a>
+<a class="font-['JetBrains_Mono'] text-[10px] uppercase opacity-60 text-[#d0c6ac] hover:text-[#FFD530] hover:opacity-100 transition-all" href="#">API_Status</a>
+</div>
+</footer>
+</body></html>

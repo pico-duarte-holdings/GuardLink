@@ -8,28 +8,30 @@ import {
   ArrowLeft, LogOut, ShieldAlert, Download, CheckSquare, Square, Trash2,
   LogIn, Loader2, History, Eye, X, UserPlus, Moon, Sun, Settings, Smartphone,
   MapPin, Instagram, Facebook, Link as LinkIcon, Linkedin, Youtube, MessageSquare,
-  Phone, Edit, Plus, Upload, QrCode, Forward, AlertTriangle, LayoutGrid, List, Target
+  Phone, Edit, Plus, Upload, QrCode, Forward, AlertTriangle, LayoutGrid, List, Target,
+  Inbox, PhoneCall, BookOpen, Activity, FileWarning, Star, ChevronDown
 } from 'lucide-react';
 import { MissionControl } from './MissionControl';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
-import { onSnapshot, collection, query, orderBy, updateDoc, doc, setDoc, deleteDoc, addDoc, getDoc } from 'firebase/firestore';
+import { onSnapshot, collection, query, orderBy, updateDoc, doc, setDoc, deleteDoc, addDoc, getDoc, where } from 'firebase/firestore';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { db, auth, storage } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Lead, Subscription } from './types';
 import { cn } from './lib/utils';
 import { Bell } from 'lucide-react';
-import { SharedFooter } from './SharedFooter';
-import { FloatingCTA } from './FloatingCTA';
 import { SharedChatbot } from './SharedChatbot';
-import { BasicTrainingGame } from './BasicTrainingGame';
+import { LeadIntake } from './LeadIntake';
 
 const LEAD_STATUSES = ['New', 'Contacted', 'Appointment', 'ASVAB', 'Physical', 'Waiver', 'Qualified', 'Enlisted'];
 const CHART_COLORS = ['#FFD530', '#00f2ff', '#39ff14', '#a855f7', '#ff0055', '#ffffff'];
 const PLATOONS = ['HQ', 'C1', 'C2', 'C3', 'C4'];
 
+import { useNavigate } from 'react-router-dom';
+
 export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
+  const navigate = useNavigate();
   const [isFirebaseAuthenticated, setIsFirebaseAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'admin' | 'recruiter' | 'pending' | null>(null);
   const [userPlatoons, setUserPlatoons] = useState<string[]>(['HQ']);
@@ -38,10 +40,10 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   const [error, setError] = useState('');
 
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [team, setTeam] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'leads' | 'subscriptions' | 'team'>('leads');
+  const [activeTab, setActiveTab] = useState<'funnel' | 'intake' | 'mission' | 'team'>('funnel');
+  const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -49,11 +51,9 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   const [showCreateRecruiter, setShowCreateRecruiter] = useState(false);
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [showCSVModal, setShowCSVModal] = useState(false);
-  const [showGame, setShowGame] = useState(false);
 
   const [editingMember, setEditingMember] = useState<any | null>(null);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
-  const [editingSub, setEditingSub] = useState<Subscription | null>(null);
   const [journeyLead, setJourneyLead] = useState<Lead | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -178,39 +178,41 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
 
   useEffect(() => {
     if (!isFirebaseAuthenticated || !userRole) return;
-    const unsubLeads = onSnapshot(query(collection(db, 'leads'), orderBy('timestamp', 'desc')), (snapshot) => {
+    
+    let leadsQuery = query(collection(db, 'leads'), orderBy('timestamp', 'desc'));
+    if (!isCommander && userRole !== 'admin') {
+      leadsQuery = query(collection(db, 'leads'), where('recruiterId', '==', auth.currentUser?.uid), orderBy('timestamp', 'desc'));
+    }
+    
+    const unsubLeads = onSnapshot(leadsQuery, (snapshot) => {
       let leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as (Lead & { id: string })[];
-      if (!isCommander) {
-        if (userRole === 'admin') leadsData = leadsData.filter(l => userPlatoons.includes(l.platoon || 'HQ'));
-        else leadsData = leadsData.filter(l => l.recruiterId === auth.currentUser?.uid);
+      if (!isCommander && userRole === 'admin') {
+        leadsData = leadsData.filter(l => userPlatoons.includes(l.platoon || 'HQ'));
       }
       setLeads(leadsData); setIsLoading(false);
     }, (err) => { console.error('Leads snapshot error:', err); setIsLoading(false); setError('Could not load leads — check Firestore rules.'); });
-    const unsubSubs = onSnapshot(query(collection(db, 'subscriptions'), orderBy('timestamp', 'desc')), (snapshot) => {
-      let subsData = snapshot.docs.map(doc => ({ id: doc.id, status: 'New', ...doc.data() })) as (Subscription & { id: string })[];
-      if (!isCommander) {
-        if (userRole === 'admin') subsData = subsData.filter(s => userPlatoons.includes(s.platoon || 'HQ'));
-        else subsData = subsData.filter(s => s.recruiterId === auth.currentUser?.uid);
-      }
-      setSubscriptions(subsData);
-    }, (err) => { console.error('Subscriptions snapshot error:', err); });
-    const unsubTeam = onSnapshot(query(collection(db, 'users'), orderBy('createdAt', 'desc')), (snapshot) => {
-      let teamData = snapshot.docs.map(doc => {
-        const d = doc.data();
-        return { id: doc.id, ...d, platoons: d.platoons || (d.platoon ? [d.platoon] : ['HQ']) };
-      });
-      if (!isCommander && userRole === 'admin') {
-        teamData = teamData.filter(t => (t.platoons as string[]).some(p => userPlatoons.includes(p)));
-      }
-      setTeam(teamData);
-    }, (err) => { console.error('Team snapshot error:', err); });
-    return () => { unsubLeads(); unsubSubs(); unsubTeam(); };
+    
+    let unsubTeam = () => {};
+    if (isCommander || userRole === 'admin') {
+      unsubTeam = onSnapshot(query(collection(db, 'users'), orderBy('createdAt', 'desc')), (snapshot) => {
+        let teamData = snapshot.docs.map(doc => {
+          const d = doc.data();
+          return { id: doc.id, ...d, platoons: d.platoons || (d.platoon ? [d.platoon] : ['HQ']) };
+        });
+        if (!isCommander && userRole === 'admin') {
+          teamData = teamData.filter(t => (t.platoons as string[]).some(p => userPlatoons.includes(p)));
+        }
+        setTeam(teamData);
+      }, (err) => { console.error('Team snapshot error:', err); });
+    }
+    
+    return () => { unsubLeads(); unsubTeam(); };
   }, [isFirebaseAuthenticated, userRole, userPlatoons, isCommander]);
 
   const isLeadStale = (lead: any) => {
     if (lead.status !== 'New' && lead.status !== 'Contacted') return false;
     let lastAction = new Date(lead.timestamp).getTime();
-    if (lead.notes && lead.notes.length > 0) lastAction = Math.max(lastAction, new Date(lead.notes[lead.notes.length - 1].timestamp).getTime());
+    if (lead.notes && Array.isArray(lead.notes) && lead.notes.length > 0) lastAction = Math.max(lastAction, new Date(lead.notes[lead.notes.length - 1].timestamp).getTime());
     return (Date.now() - lastAction) / (1000 * 60 * 60) > 72;
   };
 
@@ -236,15 +238,14 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
       setUserSlug(null);
       setUserPlatoons(['HQ']);
       setLeads([]);
-      setSubscriptions([]);
       setTeam([]);
     } catch (err) {
       console.error('Logout error:', err);
     }
   };
 
-  const handleInlineStatusUpdate = async (id: string, newStatus: string, type: 'lead' | 'sub' = 'lead') => {
-    try { await updateDoc(doc(db, type === 'lead' ? 'leads' : 'subscriptions', id), { status: newStatus }); } catch (err) { console.error(err); }
+  const handleInlineStatusUpdate = async (id: string, newStatus: string) => {
+    try { await updateDoc(doc(db, 'leads', id), { status: newStatus }); } catch (err) { console.error(err); }
   };
 
   const handleInlineRoleUpdate = async (id: string, newRole: string) => {
@@ -261,12 +262,11 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
         timestamp: new Date().toISOString(), status: 'New', recruiterId: auth.currentUser.uid, recruiterName: generatedName,
         platoon: profileData.platoons && profileData.platoons.length > 0 ? profileData.platoons[0] : 'HQ', optIn: true
       };
-      if (activeTab === 'leads') {
+      if (activeTab === 'funnel') {
         payload.age = newLeadData.age || ''; payload.education = newLeadData.education || 'HS Graduate';
         payload.interest = newLeadData.interest || 'Enlisted'; payload.mos = newLeadData.mos || 'TBD'; payload.source = newLeadData.source || 'Manual Entry';
       }
-      if (activeTab === 'subscriptions') payload.name = `${newLeadData.firstName} ${newLeadData.lastName}`.trim();
-      await addDoc(collection(db, activeTab === 'leads' ? 'leads' : 'subscriptions'), payload);
+      await addDoc(collection(db, 'leads'), payload);
       setShowAddLeadModal(false); setNewLeadData({ firstName: '', lastName: '', phone: '', email: '', age: '', education: 'HS Graduate', interest: 'Enlisted', mos: 'TBD', source: 'Manual Entry' });
     } catch (err: any) { alert("Error: " + err.message); }
   };
@@ -346,31 +346,27 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
     if (!editingLead || !editingLead.id || !newNote.trim()) return;
     try {
       const noteObj = { text: newNote.trim(), timestamp: new Date().toISOString(), author: `${profileData.rank} ${profileData.lastName}`.trim() || 'Recruiter' };
-      const updatedNotes = [...(editingLead.notes || []), noteObj];
+      const currentNotes = Array.isArray(editingLead.notes) ? editingLead.notes : (editingLead.notes ? [{ text: editingLead.notes, timestamp: editingLead.timestamp, author: 'System' }] : []);
+      const updatedNotes = [...currentNotes, noteObj];
       await updateDoc(doc(db, 'leads', editingLead.id), { notes: updatedNotes });
       setEditingLead({ ...editingLead, notes: updatedNotes }); setNewNote('');
     } catch (err: any) { alert("Error: " + err.message); }
   };
 
-  const handleUpdateSub = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingSub || !editingSub.id) return;
-    try {
-      await updateDoc(doc(db, 'subscriptions', editingSub.id), { name: editingSub.name, phone: editingSub.phone, email: editingSub.email, status: editingSub.status });
-      setEditingSub(null);
-    } catch (err: any) { alert("Error: " + err.message); }
-  };
-
-  const handleDeleteLead = async (id: string, type: 'lead' | 'sub' = 'lead') => {
+  const handleDeleteLead = async (id: string) => {
     if (!window.confirm(`Permanently delete this record?`)) return;
     try {
-      await deleteDoc(doc(db, type === 'lead' ? 'leads' : 'subscriptions', id));
-      if (type === 'lead') setEditingLead(null); else setEditingSub(null);
+      await deleteDoc(doc(db, 'leads', id));
+      setEditingLead(null);
     } catch (err) { console.error(err); }
   };
 
   const handlePhotoUpload = async (file: File) => {
     if (!auth.currentUser) return;
+    if (!storage) {
+      alert("Storage is not configured for this project.");
+      return;
+    }
     setIsUploadingPhoto(true);
     try {
       const storageRef = ref(storage, `profile-photos/${auth.currentUser.uid}`);
@@ -468,14 +464,6 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
     });
   }, [leads, searchQuery, statusFilter, sourceFilter, mosFilter, recruiterFilter, startDate, endDate]);
 
-  const filteredSubs = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    return subscriptions.filter(sub => {
-      const matchesSearch = !q || sub.name.toLowerCase().includes(q) || sub.email.toLowerCase().includes(q) || sub.phone.includes(searchQuery);
-      return matchesSearch && (statusFilter === 'All' || sub.status === statusFilter) && (recruiterFilter === 'All' || sub.recruiterId === recruiterFilter);
-    });
-  }, [subscriptions, searchQuery, statusFilter, recruiterFilter]);
-
   const filteredTeam = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return team.filter(member => {
@@ -487,12 +475,11 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // Pagination
   const totalPages = useMemo(() => {
-    const count = activeTab === 'leads' ? filteredLeads.length : activeTab === 'subscriptions' ? filteredSubs.length : filteredTeam.length;
+    const count = activeTab === 'funnel' ? filteredLeads.length : filteredTeam.length;
     return Math.max(1, Math.ceil(count / ITEMS_PER_PAGE));
-  }, [activeTab, filteredLeads.length, filteredSubs.length, filteredTeam.length]);
+  }, [activeTab, filteredLeads.length, filteredTeam.length]);
 
   const paginatedLeads = useMemo(() => filteredLeads.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE), [filteredLeads, currentPage]);
-  const paginatedSubs = useMemo(() => filteredSubs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE), [filteredSubs, currentPage]);
   const paginatedTeam = useMemo(() => filteredTeam.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE), [filteredTeam, currentPage]);
 
   // Reset to page 1 when filters change
@@ -511,7 +498,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   const toggleSelectAll = () => {
-    const cl = activeTab === 'leads' ? filteredLeads : activeTab === 'subscriptions' ? filteredSubs : filteredTeam;
+    const cl = activeTab === 'funnel' ? filteredLeads : filteredTeam;
     if (selectedEmails.size === cl.length && cl.length > 0) setSelectedEmails(new Set());
     else setSelectedEmails(new Set(cl.map(l => l.email)));
   };
@@ -524,8 +511,8 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const handleBulkAction = async (action: 'status' | 'transfer' | 'role' | 'delete' | 'platoon', val?: string) => {
     try {
-      const col = activeTab === 'leads' ? leads : activeTab === 'subscriptions' ? subscriptions : team;
-      const dbCol = activeTab === 'leads' ? 'leads' : activeTab === 'subscriptions' ? 'subscriptions' : 'users';
+      const col = activeTab === 'funnel' ? leads : team;
+      const dbCol = activeTab === 'funnel' ? 'leads' : 'users';
       const items = col.filter(item => selectedEmails.has(item.email));
 
       if (action === 'delete') {
@@ -595,55 +582,107 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   }
 
   return (
-    <div className="min-h-screen bg-army-black text-white font-sans pb-20 relative">
-      <div className="scanline" />
+    <div className="min-h-screen bg-army-black text-white font-sans flex relative overflow-hidden">
+      <div className="scanline pointer-events-none" />
       <input type="file" accept=".csv" ref={fileInputRef} onChange={handleCSVUpload} className="hidden" />
 
-      {/* Header */}
-      <header className="bg-army-black/80 backdrop-blur-md border-b border-army-gold/20 py-3 md:py-4 px-4 md:px-6 flex justify-between items-center sticky top-0 z-[40]">
-        <div className="flex items-center gap-2 md:gap-4">
-          <button onClick={onBack} className="p-1 md:p-2 hover:bg-army-gold/10"><ArrowLeft className="w-5 h-5 text-army-gold" /></button>
-          <div className="flex flex-col">
-            <h1 className="text-lg md:text-xl font-black uppercase tracking-tighter glow-text">Command <span className="text-army-gold">Center</span></h1>
-            <span className="text-[7px] md:text-[8px] font-mono text-zinc-500 uppercase tracking-widest leading-none mt-0.5">// Platoon Access: {userPlatoons.join(', ')}</span>
+      {/* Bottom Navigation */}
+      <nav 
+        className="fixed bottom-0 left-0 w-full z-50 bg-zinc-950 border-t border-zinc-900 flex flex-col md:flex-row items-center justify-between px-2 md:px-6 pt-2"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+      >
+        {/* Logo */}
+        <div className="flex flex-col items-center md:items-start gap-0.5 mb-2 md:mb-0 md:mr-8">
+          <h1 className="font-sans font-black text-army-gold text-lg md:text-xl tracking-tighter leading-none">GUARD<span className="text-white">LINK</span></h1>
+          <span className="opacity-40 text-[8px] font-mono uppercase">V0.42_STABLE</span>
+        </div>
+
+        <div className="w-full flex-1 flex justify-around md:justify-start items-center gap-1 md:gap-4">
+          {/* Tabs */}
+          <button onClick={() => setActiveTab('funnel')} className={cn("flex flex-col items-center gap-1 p-2 md:px-4 md:py-2 md:flex-row rounded transition-all", activeTab === 'funnel' ? "text-army-gold bg-army-gold/10" : "text-zinc-400 hover:text-army-gold hover:bg-zinc-900")}>
+            <Filter className="w-5 h-5 md:w-4 md:h-4" />
+            <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">Funnel</span>
+          </button>
+          <button onClick={() => setActiveTab('mission')} className={cn("flex flex-col items-center gap-1 p-2 md:px-4 md:py-2 md:flex-row rounded transition-all", activeTab === 'mission' ? "text-army-gold bg-army-gold/10" : "text-zinc-400 hover:text-army-gold hover:bg-zinc-900")}>
+            <Target className="w-5 h-5 md:w-4 md:h-4" />
+            <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">Mission</span>
+          </button>
+          <button onClick={() => setActiveTab('intake')} className={cn("flex flex-col items-center gap-1 p-2 md:px-4 md:py-2 md:flex-row rounded transition-all", activeTab === 'intake' ? "text-army-gold bg-army-gold/10" : "text-zinc-400 hover:text-army-gold hover:bg-zinc-900")}>
+            <Upload className="w-5 h-5 md:w-4 md:h-4" />
+            <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">Intake</span>
+          </button>
+          {(userRole === 'admin' || isCommander) && (
+            <button onClick={() => setActiveTab('team')} className={cn("flex flex-col items-center gap-1 p-2 md:px-4 md:py-2 md:flex-row rounded transition-all", activeTab === 'team' ? "text-army-gold bg-army-gold/10" : "text-zinc-400 hover:text-army-gold hover:bg-zinc-900")}>
+              <Users className="w-5 h-5 md:w-4 md:h-4" />
+              <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">Team</span>
+            </button>
+          )}
+
+          {/* New Lead Button */}
+          <div className="md:ml-auto">
+            <button onClick={() => setShowAddLeadModal(true)} className="bg-army-gold text-army-black font-black p-3 md:px-4 md:py-2 rounded-full md:rounded flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_15px_rgba(255,213,48,0.3)]">
+              <Plus className="w-5 h-5 md:w-4 md:h-4" />
+              <span className="hidden md:inline text-[10px] uppercase">New Lead</span>
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-3 md:gap-6">
-          <div className="hidden sm:flex items-center gap-3 px-4 py-2 bg-army-gold/5 border border-army-gold/20">
-            <div className="w-8 h-8 bg-army-gold flex items-center justify-center text-army-black font-black text-xs">{profileData.lastName?.substring(0,2).toUpperCase() || 'RC'}</div>
-            <div className="flex flex-col">
-              <span className="text-[10px] font-black uppercase tracking-tighter">{`${profileData.rank} ${profileData.lastName}`.trim() || 'Recruiter'}</span>
-              <span className="text-[8px] font-mono text-army-gold uppercase">{isCommander ? 'Commander' : userRole === 'admin' ? 'Section Chief' : 'Field Agent'}</span>
+      </nav>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-h-screen pb-32 md:pb-20 w-full">
+        <header className="bg-army-black/80 backdrop-blur-md border-b border-zinc-900 py-3 md:py-4 px-4 md:px-6 flex justify-between items-center sticky top-0 z-[40]">
+          <div className="flex items-center gap-4">
+            <button onClick={onBack} className="p-2 hover:bg-zinc-900 text-zinc-400 hover:text-army-gold transition-colors"><ArrowLeft className="w-5 h-5" /></button>
+            <div className="hidden md:flex relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <input 
+                className="bg-zinc-950 border border-zinc-800 text-xs font-mono uppercase py-2 pl-10 pr-4 w-64 focus:border-army-gold transition-all outline-none text-white" 
+                placeholder="QUERY_DATABASE..." 
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
-          <button onClick={() => setShowProfileModal(true)} className="text-zinc-500 hover:text-army-gold"><Settings className="w-5 h-5" /></button>
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className="text-zinc-500 hover:text-army-gold">{isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
-          <button onClick={() => setShowLogoutConfirm(true)} className="text-zinc-500 hover:text-red-500"><LogOut className="w-5 h-5" /></button>
-        </div>
-      </header>
+          <div className="flex items-center gap-3 md:gap-6">
+            <div className="hidden sm:flex items-center gap-3 px-4 py-2 bg-army-gold/5 border border-army-gold/20">
+              <div className="w-8 h-8 bg-army-gold flex items-center justify-center text-army-black font-black text-xs">{profileData.lastName?.substring(0,2).toUpperCase() || 'RC'}</div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-tighter">{`${profileData.rank} ${profileData.lastName}`.trim() || 'Recruiter'}</span>
+                <span className="text-[8px] font-mono text-army-gold uppercase">{isCommander ? 'Commander' : userRole === 'admin' ? 'Section Chief' : 'Field Agent'}</span>
+              </div>
+            </div>
+            <button onClick={() => setShowProfileModal(true)} className="text-zinc-500 hover:text-army-gold"><Settings className="w-5 h-5" /></button>
+            <button onClick={() => setIsDarkMode(!isDarkMode)} className="text-zinc-500 hover:text-army-gold">{isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
+            <button onClick={() => setShowLogoutConfirm(true)} className="text-zinc-500 hover:text-red-500"><LogOut className="w-5 h-5" /></button>
+          </div>
+        </header>
 
-      <main className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
-        {/* Stats — clickable tiles */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <button onClick={() => handleTileClick('All')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", activeTab === 'leads' && statusFilter === 'All' && "ring-2 ring-neon-cyan/50")}><div className="text-neon-cyan"><p className="text-[10px] uppercase font-black">Total Pipeline</p><p className="text-3xl font-black">{leads.length}</p></div><Users className="w-6 h-6 text-neon-cyan/50" /></button>
-          <button onClick={() => handleTileClick('New')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", activeTab === 'leads' && statusFilter === 'New' && "ring-2 ring-neon-green/50")}><div className="text-neon-green"><p className="text-[10px] uppercase font-black">New Intel</p><p className="text-3xl font-black">{statusCounts['New'] || 0}</p></div><TrendingUp className="w-6 h-6 text-neon-green/50" /></button>
-          <button onClick={() => handleTileClick('Appointment')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", activeTab === 'leads' && statusFilter === 'Appointment' && "ring-2 ring-purple-500/50")}><div className="text-purple-500"><p className="text-[10px] uppercase font-black">Appointments</p><p className="text-3xl font-black">{statusCounts['Appointment'] || 0}</p></div><Clock className="w-6 h-6 text-purple-500/50" /></button>
-          <button onClick={() => handleTileClick('Enlisted')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", activeTab === 'leads' && statusFilter === 'Enlisted' && "ring-2 ring-white/30")}><div className="text-white"><p className="text-[10px] uppercase font-black">Enlistments</p><p className="text-3xl font-black">{statusCounts['Enlisted'] || 0}</p></div><CheckCircle className="w-6 h-6 text-white/50" /></button>
-        </div>
+        <div className="p-4 md:p-8 flex-1 w-full max-w-7xl mx-auto space-y-6">
+          {activeTab === 'dashboard' && (
+            <>
+              {/* Stats — clickable tiles */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <button onClick={() => handleTileClick('All')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", statusFilter === 'All' && "ring-2 ring-neon-cyan/50")}><div className="text-neon-cyan"><p className="text-[10px] uppercase font-black">Total Pipeline</p><p className="text-3xl font-black">{leads.length}</p></div><Users className="w-6 h-6 text-neon-cyan/50" /></button>
+                <button onClick={() => handleTileClick('New')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", statusFilter === 'New' && "ring-2 ring-neon-green/50")}><div className="text-neon-green"><p className="text-[10px] uppercase font-black">New Intel</p><p className="text-3xl font-black">{statusCounts['New'] || 0}</p></div><TrendingUp className="w-6 h-6 text-neon-green/50" /></button>
+                <button onClick={() => handleTileClick('Appointment')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", statusFilter === 'Appointment' && "ring-2 ring-purple-500/50")}><div className="text-purple-500"><p className="text-[10px] uppercase font-black">Appointments</p><p className="text-3xl font-black">{statusCounts['Appointment'] || 0}</p></div><Clock className="w-6 h-6 text-purple-500/50" /></button>
+                <button onClick={() => handleTileClick('Enlisted')} className={cn("hud-border p-4 md:p-6 flex items-center justify-between text-left cursor-pointer transition-all hover:scale-[1.02] active:scale-95", statusFilter === 'Enlisted' && "ring-2 ring-white/30")}><div className="text-white"><p className="text-[10px] uppercase font-black">Enlistments</p><p className="text-3xl font-black">{statusCounts['Enlisted'] || 0}</p></div><CheckCircle className="w-6 h-6 text-white/50" /></button>
+              </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 hud-border p-6 h-[300px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke="#1a1a1a" vertical={false} /><XAxis dataKey="name" stroke="#52525b" fontSize={10} /><YAxis stroke="#52525b" fontSize={10} /><Tooltip contentStyle={{backgroundColor: '#030000', border: '1px solid rgba(255,213,48,0.3)'}} /><Bar dataKey="value" fill="#FFD530">{chartData.map((e,i) => <Cell key={i} fill={e.color} />)}</Bar></BarChart></ResponsiveContainer></div>
-          <div className="hud-border p-6 h-[300px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={dynamicSourceData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} dataKey="count">{dynamicSourceData.map((e,i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip contentStyle={{backgroundColor: '#030000', border: '1px solid rgba(255,213,48,0.3)'}} /></PieChart></ResponsiveContainer></div>
-        </div>
+              {/* Charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 hud-border p-6 h-[300px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke="#1a1a1a" vertical={false} /><XAxis dataKey="name" stroke="#52525b" fontSize={10} /><YAxis stroke="#52525b" fontSize={10} /><Tooltip contentStyle={{backgroundColor: '#030000', border: '1px solid rgba(255,213,48,0.3)'}} /><Bar dataKey="value" fill="#FFD530">{chartData.map((e,i) => <Cell key={i} fill={e.color} />)}</Bar></BarChart></ResponsiveContainer></div>
+                <div className="hud-border p-6 h-[300px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={dynamicSourceData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} dataKey="count">{dynamicSourceData.map((e,i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip contentStyle={{backgroundColor: '#030000', border: '1px solid rgba(255,213,48,0.3)'}} /></PieChart></ResponsiveContainer></div>
+              </div>
+            </>
+          )}
 
-        {/* Tabs */}
-        <div className="flex gap-4">
-          <button onClick={() => {setActiveTab('leads'); setSelectedEmails(new Set());}} className={cn("px-6 py-2 font-black uppercase text-xs tracking-widest border-2", activeTab === 'leads' ? "bg-army-gold text-black border-army-gold" : "text-zinc-500 border-zinc-800")}>Leads</button>
-          <button onClick={() => {setActiveTab('subscriptions'); setSelectedEmails(new Set());}} className={cn("px-6 py-2 font-black uppercase text-xs tracking-widest border-2", activeTab === 'subscriptions' ? "bg-army-gold text-black border-army-gold" : "text-zinc-500 border-zinc-800")}>Subscribers</button>
-          <button onClick={() => {setActiveTab('mission' as any); setSelectedEmails(new Set());}} className={cn("px-6 py-2 font-black uppercase text-xs tracking-widest border-2 flex items-center gap-2", (activeTab as string) === 'mission' ? "bg-army-gold text-black border-army-gold" : "text-zinc-500 border-zinc-800")}><Target className="w-3 h-3" />Mission Control</button>
-          {(userRole === 'admin' || isCommander) && <button onClick={() => {setActiveTab('team'); setSelectedEmails(new Set());}} className={cn("px-6 py-2 font-black uppercase text-xs tracking-widest border-2", activeTab === 'team' ? "bg-army-gold text-black border-army-gold" : "text-zinc-500 border-zinc-800")}>Team</button>}
-        </div>
+        {/* Intake Tab */}
+        {(activeTab as string) === 'intake' && (
+          <div className="hud-border bg-army-black/50 p-4 md:p-6">
+            <LeadIntake onImportComplete={() => setActiveTab('candidates')} userPlatoons={userPlatoons} />
+          </div>
+        )}
 
         {/* Mission Control Tab */}
         {(activeTab as string) === 'mission' && (
@@ -653,22 +692,17 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
         )}
 
         {/* Main Data Area */}
-        {(activeTab as string) !== 'mission' && <div className="hud-border bg-army-black/50">
+        {((activeTab as string) === 'funnel' || (activeTab as string) === 'team') && (
+          <div className="hud-border bg-army-black/50">
           <div className="p-4 border-b border-army-gold/10 flex justify-between items-center gap-4 flex-wrap">
             <div className="flex items-center gap-3">
-              <h3 className="text-sm font-black uppercase glow-text tracking-widest">{activeTab} ({activeTab === 'leads' ? filteredLeads.length : activeTab === 'team' ? filteredTeam.length : filteredSubs.length})</h3>
+              <h3 className="text-sm font-black uppercase glow-text tracking-widest">{activeTab} ({activeTab === 'funnel' ? filteredLeads.length : filteredTeam.length})</h3>
               {statusFilter !== 'All' && <button onClick={() => { setStatusFilter('All'); setCurrentPage(1); }} className="flex items-center gap-1 px-2 py-1 bg-army-gold/10 border border-army-gold/30 text-army-gold text-[9px] font-black uppercase hover:bg-army-gold/20"><span>Filtered: {statusFilter}</span><X className="w-3 h-3" /></button>}
             </div>
             <div className="flex gap-2 items-center flex-wrap">
-              {activeTab === 'leads' && (
-                <div className="flex bg-zinc-900 border border-zinc-800 rounded mr-2">
-                  <button onClick={() => setViewMode('table')} className={cn("p-2", viewMode === 'table' ? "bg-army-gold text-black" : "text-zinc-500")}><List className="w-4 h-4" /></button>
-                  <button onClick={() => setViewMode('kanban')} className={cn("p-2", viewMode === 'kanban' ? "bg-army-gold text-black" : "text-zinc-500")}><LayoutGrid className="w-4 h-4" /></button>
-                </div>
-              )}
               {activeTab !== 'team' && <button onClick={() => setShowAddLeadModal(true)} className="px-4 py-2 bg-army-gold/10 text-army-gold text-[10px] font-black uppercase"><Plus className="w-4 h-4 inline mr-2"/>Add</button>}
-              {activeTab === 'leads' && <button onClick={() => { if(userRole==='admin'||isCommander) setShowCSVModal(true); else fileInputRef.current?.click(); }} className="px-4 py-2 bg-zinc-900 text-zinc-400 text-[10px] font-black uppercase hover:text-army-gold"><Upload className="w-4 h-4 inline mr-2"/>CSV</button>}
-              {activeTab !== 'team' && <button onClick={() => exportToCSV(activeTab === 'leads' ? filteredLeads : filteredSubs)} className="px-4 py-2 bg-zinc-900 text-zinc-400 text-[10px] font-black uppercase hover:text-army-gold"><Download className="w-4 h-4 inline mr-2"/>Export</button>}
+              {activeTab === 'funnel' && <button onClick={() => { if(userRole==='admin'||isCommander) setShowCSVModal(true); else fileInputRef.current?.click(); }} className="px-4 py-2 bg-zinc-900 text-zinc-400 text-[10px] font-black uppercase hover:text-army-gold"><Upload className="w-4 h-4 inline mr-2"/>CSV</button>}
+              {activeTab !== 'team' && <button onClick={() => exportToCSV(activeTab === 'funnel' ? filteredLeads : [])} className="px-4 py-2 bg-zinc-900 text-zinc-400 text-[10px] font-black uppercase hover:text-army-gold"><Download className="w-4 h-4 inline mr-2"/>Export</button>}
               {activeTab === 'team' && <button onClick={() => setShowCreateRecruiter(true)} className="px-4 py-2 bg-army-gold/10 text-army-gold text-[10px] font-black uppercase"><UserPlus className="w-4 h-4 inline mr-2"/>Create</button>}
               <div className="relative"><Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" /><input placeholder="Search..." className="bg-zinc-950 border border-zinc-800 py-1 pl-8 pr-2 text-xs w-48 focus:border-army-gold outline-none" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></div>
               <button onClick={() => setShowFilters(!showFilters)} className={cn("p-2 border", showFilters ? "bg-army-gold/10 border-army-gold text-army-gold" : "bg-zinc-900 border-zinc-800 text-zinc-500")}><Filter className="w-4 h-4" /></button>
@@ -684,7 +718,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
           )}
 
           {/* Bulk Action Bar */}
-          {selectedEmails.size > 0 && viewMode === 'table' && (
+          {selectedEmails.size > 0 && activeTab === 'funnel' && (
             <div className="bg-army-gold p-3 flex justify-between items-center text-black text-[10px] font-black uppercase">
               <div className="flex gap-4 items-center">
                 <span>{selectedEmails.size} Selected</span>
@@ -698,46 +732,111 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
 
-          {/* RENDERING: KANBAN vs TABLE */}
+          {/* RENDERING: FUNNEL vs TEAM */}
           {isLoading ? <div className="py-20 text-center"><Loader2 className="w-8 h-8 animate-spin text-army-gold mx-auto" /></div> :
-          viewMode === 'kanban' && activeTab === 'leads' ? (
-            <div className="p-6 overflow-x-auto">
-              <div className="flex gap-4 snap-x min-h-[600px] w-max">
-                {LEAD_STATUSES.map(status => {
+          activeTab === 'funnel' ? (
+            <div className="p-4 md:p-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+                {LEAD_STATUSES.map((status, index) => {
                   const cols = filteredLeads.filter(l => l.status === status);
+                  const isExpanded = expandedStage === status;
+                  
+                  // Map statuses to icons
+                  const getStatusIcon = (s: string) => {
+                    switch(s) {
+                      case 'New': return <Inbox className="w-5 h-5" />;
+                      case 'Contacted': return <PhoneCall className="w-5 h-5" />;
+                      case 'Appointment': return <Calendar className="w-5 h-5" />;
+                      case 'ASVAB': return <BookOpen className="w-5 h-5" />;
+                      case 'Physical': return <Activity className="w-5 h-5" />;
+                      case 'Waiver': return <FileWarning className="w-5 h-5" />;
+                      case 'Qualified': return <Star className="w-5 h-5" />;
+                      case 'Enlisted': return <CheckCircle className="w-5 h-5" />;
+                      default: return <Target className="w-5 h-5" />;
+                    }
+                  };
+
                   return (
-                    <div key={status} className="w-[300px] bg-zinc-900/40 border border-zinc-800 rounded p-4 flex flex-col h-[700px]" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('leadId'); if (id) handleInlineStatusUpdate(id, status, 'lead'); }}>
-                      <h4 className="font-black uppercase text-army-gold mb-4 border-b border-zinc-800 pb-2">{status} ({cols.length})</h4>
-                      <div className="flex-1 overflow-y-auto space-y-3 scrollbar-hide pr-1">
-                        {cols.map(lead => {
-                          const stale = isLeadStale(lead); const due = isFollowUpDue(lead);
-                          return (
-                            <div key={lead.id} draggable onDragStart={e => e.dataTransfer.setData('leadId', lead.id as string)} className={cn("bg-army-black border p-3 rounded cursor-grab hover:scale-[1.02] transition-transform", stale ? "border-red-500 bg-red-950/30" : "border-zinc-800")}>
-                              <div className="flex justify-between items-start mb-2">
-                                <span className={cn("font-black text-sm uppercase", stale ? "text-red-400" : "text-white")}>
-                                  {stale && <AlertTriangle className="w-3 h-3 inline mr-1 text-red-500" />}
-                                  {lead.firstName} {lead.lastName}
-                                </span>
-                                {due && <span className="bg-army-gold text-black text-[8px] font-black px-1 animate-pulse">DUE</span>}
-                              </div>
-                              <div className="text-[9px] text-zinc-500 mb-2">{lead.email}</div>
-                              <select value={lead.status} onChange={e => handleInlineStatusUpdate(lead.id as string, e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 text-[9px] font-black uppercase text-zinc-400 p-1 mb-3"><option value={lead.status}>{lead.status}</option>{LEAD_STATUSES.map(s => s !== lead.status && <option key={s} value={s}>Move to: {s}</option>)}</select>
-                              <div className="flex justify-between items-center">
-                                <div className="flex gap-1">
-                                  <a href={`tel:${lead.phone}`} className="p-1 bg-zinc-800 rounded text-zinc-400 hover:text-neon-green"><Phone className="w-3 h-3"/></a>
-                                  <a href={getCommsLink('sms', lead)} className="p-1 bg-zinc-800 rounded text-zinc-400 hover:text-neon-cyan"><MessageSquare className="w-3 h-3"/></a>
-                                  <a href={getCommsLink('email', lead)} className="p-1 bg-zinc-800 rounded text-zinc-400 hover:text-army-gold"><Mail className="w-3 h-3"/></a>
-                                </div>
-                                <button onClick={()=>setEditingLead(lead)} className="text-[9px] uppercase text-zinc-500 font-black hover:text-army-gold"><Edit className="w-3 h-3 inline"/> Edit</button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                    <div key={status} className="flex flex-col">
+                      <button 
+                        onClick={() => setExpandedStage(isExpanded ? null : status)}
+                        className={cn(
+                          "flex flex-col items-center justify-center p-4 rounded-lg border transition-all duration-200",
+                          isExpanded ? "bg-army-gold text-army-black border-army-gold" : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-army-gold"
+                        )}
+                      >
+                        <div className="mb-2">{getStatusIcon(status)}</div>
+                        <span className="text-[10px] font-black uppercase text-center mb-1">{status}</span>
+                        <span className="text-xl font-black">{cols.length}</span>
+                        <ChevronDown className={cn("w-4 h-4 mt-2 transition-transform", isExpanded ? "rotate-180" : "")} />
+                      </button>
                     </div>
                   );
                 })}
               </div>
+
+              {/* Expanded Stage View */}
+              <AnimatePresence>
+                {expandedStage && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-6 overflow-hidden"
+                  >
+                    <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-4 border-b border-zinc-800 pb-2">
+                        <h4 className="font-black uppercase text-army-gold">{expandedStage} Candidates</h4>
+                        <button onClick={() => setExpandedStage(null)} className="text-zinc-500 hover:text-white"><X className="w-4 h-4" /></button>
+                      </div>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-[10px] uppercase">
+                          <thead className="text-zinc-500 font-black border-b border-zinc-800">
+                            <tr>
+                              <th className="p-2 w-10"><button onClick={toggleSelectAll}><Square className="w-4 h-4"/></button></th>
+                              <th className="p-2">Name / Contact</th>
+                              <th className="p-2">Interest</th>
+                              <th className="p-2">MOS</th>
+                              <th className="p-2">Date</th>
+                              <th className="p-2 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800/50">
+                            {filteredLeads.filter(l => l.status === expandedStage).map(lead => {
+                              const stale = isLeadStale(lead); const due = isFollowUpDue(lead);
+                              return (
+                                <tr key={lead.id} className={cn("hover:bg-white/5", stale && "bg-red-950/20")}>
+                                  <td className="p-2"><button onClick={() => toggleSelectEmail(lead.email)} className={selectedEmails.has(lead.email)?"text-army-gold":"text-zinc-500"}>{selectedEmails.has(lead.email) ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}</button></td>
+                                  <td className="p-2 font-black">
+                                    <div className={stale ? "text-red-400" : "text-white"}>
+                                      {stale && <AlertTriangle className="w-3 h-3 inline mr-1 text-red-500" />}
+                                      {lead.firstName} {lead.lastName}
+                                      {due && <span className="bg-army-gold text-black px-1 ml-2 text-[8px] font-black animate-pulse">DUE</span>}
+                                    </div>
+                                    <div className="text-zinc-500">{lead.email} • {lead.phone}</div>
+                                  </td>
+                                  <td className="p-2 text-zinc-400">{lead.interest}</td>
+                                  <td className="p-2 text-army-gold">{lead.mos}</td>
+                                  <td className="p-2 text-zinc-500 font-mono">{lead.timestamp.split('T')[0]}</td>
+                                  <td className="p-2 text-right whitespace-nowrap">
+                                    <div className="inline-flex items-center gap-1">
+                                      <a href={`tel:${lead.phone}`} className="p-1 text-zinc-500 hover:text-neon-green"><Phone className="w-4 h-4"/></a>
+                                      <a href={getCommsLink('sms', lead)} className="p-1 text-zinc-500 hover:text-neon-cyan"><MessageSquare className="w-4 h-4"/></a>
+                                      <a href={getCommsLink('email', lead)} className="p-1 text-zinc-500 hover:text-army-gold"><Mail className="w-4 h-4"/></a>
+                                      <button onClick={()=>setEditingLead(lead)} className="p-1 text-zinc-500 hover:text-army-gold"><Edit className="w-4 h-4"/></button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -747,14 +846,14 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
                     <th className="p-4 w-10"><button onClick={toggleSelectAll}><Square className="w-4 h-4"/></button></th>
                     <th className="p-4">Name / Contact</th>
                     {activeTab !== 'team' ? <th className="p-4">Status</th> : <th className="p-4">Role</th>}
-                    {activeTab === 'leads' && <><th className="p-4">Interest</th><th className="p-4">MOS</th></>}
+                    {activeTab === 'funnel' && <><th className="p-4">Interest</th><th className="p-4">MOS</th></>}
                     {activeTab === 'team' && <th className="p-4">Platoons</th>}
                     <th className="p-4">Date</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
-                  {activeTab === 'leads' ? paginatedLeads.map(lead => {
+                  {activeTab === 'funnel' ? paginatedLeads.map(lead => {
                     const stale = isLeadStale(lead); const due = isFollowUpDue(lead);
                     return (
                       <tr key={lead.id} className={cn("hover:bg-white/5", stale && "bg-red-950/20")}>
@@ -783,22 +882,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
                         </td>
                       </tr>
                     );
-                  }) : activeTab === 'subscriptions' ? paginatedSubs.map(sub => (
-                    <tr key={sub.id} className="hover:bg-white/5">
-                      <td className="p-4"><button onClick={() => toggleSelectEmail(sub.email)} className={selectedEmails.has(sub.email)?"text-army-gold":"text-zinc-500"}>{selectedEmails.has(sub.email) ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}</button></td>
-                      <td className="p-4 font-black"><div className="text-white">{sub.name}</div><div className="text-zinc-500">{sub.email} • {sub.phone}</div></td>
-                      <td className="p-4"><select value={sub.status||'New'} onChange={e=>handleInlineStatusUpdate(sub.id as string, e.target.value, 'sub')} className="bg-zinc-900 border border-zinc-800 p-1 text-[9px] uppercase font-black">{LEAD_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}</select></td>
-                      <td className="p-4 text-zinc-500 font-mono">{sub.timestamp.split('T')[0]}</td>
-                      <td className="p-4 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <a href={`tel:${sub.phone}`} className="p-2 text-zinc-500 hover:text-neon-green inline-flex items-center justify-center"><Phone className="w-4 h-4"/></a>
-                          <a href={`sms:${sub.phone}`} className="p-2 text-zinc-500 hover:text-neon-cyan inline-flex items-center justify-center"><MessageSquare className="w-4 h-4"/></a>
-                          <a href={`mailto:${sub.email}`} className="p-2 text-zinc-500 hover:text-army-gold inline-flex items-center justify-center"><Mail className="w-4 h-4"/></a>
-                          <button onClick={()=>setEditingSub(sub)} className="p-2 text-zinc-500 hover:text-army-gold inline-flex items-center justify-center"><Edit className="w-4 h-4"/></button>
-                        </div>
-                      </td>
-                    </tr>
-                  )) : paginatedTeam.map(m => (
+                  }) : paginatedTeam.map(m => (
                     <tr key={m.id} className="hover:bg-white/5">
                       <td className="p-4"><button onClick={() => toggleSelectEmail(m.email)} className={selectedEmails.has(m.email)?"text-army-gold":"text-zinc-500"}>{selectedEmails.has(m.email) ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}</button></td>
                       <td className="p-4 font-black"><div className="text-white">{m.displayName}</div><div className="text-zinc-500">{m.email}</div></td>
@@ -813,10 +897,10 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
           )}
 
           {/* Pagination Controls */}
-          {totalPages > 1 && viewMode === 'table' && (
+          {totalPages > 1 && activeTab === 'funnel' && (
             <div className="p-4 border-t border-army-gold/10 flex justify-between items-center">
               <span className="text-[10px] font-black uppercase text-zinc-500">
-                Page {currentPage} of {totalPages} — Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, activeTab === 'leads' ? filteredLeads.length : activeTab === 'subscriptions' ? filteredSubs.length : filteredTeam.length)} of {activeTab === 'leads' ? filteredLeads.length : activeTab === 'subscriptions' ? filteredSubs.length : filteredTeam.length}
+                Page {currentPage} of {totalPages} — Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, activeTab === 'funnel' ? filteredLeads.length : filteredTeam.length)} of {activeTab === 'funnel' ? filteredLeads.length : filteredTeam.length}
               </span>
               <div className="flex gap-2">
                 <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className={cn("px-3 py-1 text-[10px] font-black uppercase border", currentPage === 1 ? "border-zinc-800 text-zinc-600 cursor-not-allowed" : "border-army-gold/30 text-army-gold hover:bg-army-gold/10")}>First</button>
@@ -826,7 +910,9 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
               </div>
             </div>
           )}
-        </div>}
+          </div>
+        )}
+        </div>
       </main>
 
       {/* --- MODALS --- */}
@@ -1060,11 +1146,14 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
                 <div className="border-t border-zinc-800 pt-4">
                   <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-2">// Recruiter_Notes</h4>
                   <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-2">
-                    {((editingLead as any).notes || []).map((n: any, i: number) => (<div key={i} className="bg-zinc-900 p-2 border-l-2 border-army-gold"><p className="text-xs text-white">{n.text}</p><div className="flex justify-between mt-1"><span className="text-[8px] text-zinc-500">{n.author}</span><span className="text-[8px] text-zinc-500">{new Date(n.timestamp).toLocaleDateString()}</span></div></div>))}
+                    {Array.isArray((editingLead as any).notes) 
+                      ? ((editingLead as any).notes).map((n: any, i: number) => (<div key={i} className="bg-zinc-900 p-2 border-l-2 border-army-gold"><p className="text-xs text-white">{n.text}</p><div className="flex justify-between mt-1"><span className="text-[8px] text-zinc-500">{n.author}</span><span className="text-[8px] text-zinc-500">{new Date(n.timestamp).toLocaleDateString()}</span></div></div>))
+                      : ((editingLead as any).notes ? <div className="bg-zinc-900 p-2 border-l-2 border-army-gold"><p className="text-xs text-white">{(editingLead as any).notes}</p></div> : null)
+                    }
                   </div>
                   <div className="flex gap-2"><input type="text" value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Add note..." className="flex-1 bg-zinc-900 border border-zinc-800 p-2 text-white outline-none text-xs" /><button type="button" onClick={handleAddNote} className="px-4 bg-army-gold/10 text-army-gold text-[10px] font-black uppercase">Add</button></div>
                 </div>
-                <div className="pt-4 flex justify-between items-center border-t border-zinc-800"><button type="button" onClick={() => handleDeleteLead((editingLead as any).id, 'lead')} className="text-red-500 text-[10px] font-black uppercase"><Trash2 className="w-4 h-4 inline mr-1"/> Delete</button><div className="flex gap-2"><button type="button" onClick={() => setEditingLead(null)} className="px-4 py-2 text-zinc-400 text-[10px] font-black uppercase">Cancel</button><button type="submit" className="px-4 py-2 bg-army-gold text-black text-[10px] font-black uppercase">Save</button></div></div>
+                <div className="pt-4 flex justify-between items-center border-t border-zinc-800"><button type="button" onClick={() => handleDeleteLead((editingLead as any).id)} className="text-red-500 text-[10px] font-black uppercase"><Trash2 className="w-4 h-4 inline mr-1"/> Delete</button><div className="flex gap-2"><button type="button" onClick={() => setEditingLead(null)} className="px-4 py-2 text-zinc-400 text-[10px] font-black uppercase">Cancel</button><button type="submit" className="px-4 py-2 bg-army-gold text-black text-[10px] font-black uppercase">Save</button></div></div>
               </form>
             </div>
           </div>
@@ -1072,26 +1161,6 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
       )}
 
       {/* Edit Subscription Modal */}
-      {editingSub && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
-          <div className="hud-border bg-zinc-950 w-full max-w-md p-6">
-            <div className="flex justify-between mb-6"><h3 className="text-xl font-black text-army-gold uppercase">Edit_Subscriber</h3><button onClick={() => setEditingSub(null)}><X className="text-zinc-500 hover:text-white"/></button></div>
-            <form onSubmit={handleUpdateSub} className="space-y-4">
-              <div><label className="text-[10px] font-black uppercase text-army-gold mb-1 block">Name</label><input type="text" value={editingSub.name} onChange={e => setEditingSub({...editingSub, name: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold" required /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-[10px] font-black uppercase text-army-gold mb-1 block">Phone</label><input type="tel" value={editingSub.phone} onChange={e => setEditingSub({...editingSub, phone: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold" /></div>
-                <div><label className="text-[10px] font-black uppercase text-army-gold mb-1 block">Email</label><input type="email" value={editingSub.email} onChange={e => setEditingSub({...editingSub, email: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none focus:border-army-gold" required /></div>
-              </div>
-              <div><label className="text-[10px] font-black uppercase text-army-gold mb-1 block">Status</label><select value={editingSub.status || 'New'} onChange={e => setEditingSub({...editingSub, status: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-white outline-none">{LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-              <div className="flex justify-between items-center mt-4 pt-4 border-t border-zinc-800">
-                <button type="button" onClick={() => handleDeleteLead((editingSub as any).id, 'sub')} className="text-red-500 text-[10px] font-black uppercase"><Trash2 className="w-4 h-4 inline mr-1"/> Delete</button>
-                <div className="flex gap-2"><button type="button" onClick={() => setEditingSub(null)} className="px-4 py-2 text-zinc-400 text-[10px] font-black uppercase">Cancel</button><button type="submit" className="px-4 py-2 bg-army-gold text-black text-[10px] font-black uppercase">Save</button></div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* User Journey Modal */}
       {journeyLead && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-army-black/90 backdrop-blur-sm">
@@ -1106,44 +1175,8 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
         </div>
       )}
 
-      {/* Fixed Call/Text/Email */}
-      <FloatingCTA slugParam="" />
-
-      {/* Mini-Game Launcher Icon */}
-      <button
-        onClick={() => setShowGame(true)}
-        className="fixed bottom-36 right-8 z-30 group"
-        title="Play Basic Training"
-      >
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-neon-cyan/20 to-army-black border-2 border-neon-cyan/40 flex items-center justify-center hover:border-neon-cyan hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="group-hover:scale-110 transition-transform">
-            <path d="M3 4h14l-2 12H5L3 4z" stroke="#00f2ff" strokeWidth="1.5" fill="none"/>
-            <circle cx="7" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
-            <circle cx="13" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
-            <path d="M10 2v3" stroke="#00f2ff" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </div>
-      </button>
-
-      <AnimatePresence>
-        {showGame && (
-          <BasicTrainingGame
-            onClose={() => setShowGame(false)}
-            onGameComplete={(score) => {
-              window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-play' } }));
-              if (score >= 1500) {
-                window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-highscore' } }));
-              }
-            }}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Shared AI Chatbot */}
       <SharedChatbot slugParam="" />
-
-      {/* Footer */}
-      <SharedFooter slugParam="" />
 
     </div>
   );

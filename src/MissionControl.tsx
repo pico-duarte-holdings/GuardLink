@@ -5,7 +5,7 @@ This code, design, and associated assets may not be reproduced, distributed, or 
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, ChevronRight, User, Trophy, Award, Share2, Search, Phone, Mail, MessageSquare, MapPin, Calendar, GraduationCap, Briefcase } from 'lucide-react';
+import { Zap, ChevronRight, ChevronLeft, User, Trophy, Award, Share2, Search, Phone, Mail, MessageSquare, MapPin, Calendar, GraduationCap, Briefcase } from 'lucide-react';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { PIPELINE_STAGES, getTierForLevel, getLevelDisplay } from './useXP';
@@ -76,6 +76,9 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
   const [bonusXPAmount, setBonusXPAmount] = useState<Record<string, number>>({});
   const [updating, setUpdating] = useState<string | null>(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   // --- Zip Code Management ---
   const [assignedZips, setAssignedZips] = useState<string[]>([]);
   const [newZip, setNewZip] = useState('');
@@ -144,6 +147,14 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
     return (b.totalXP || 0) - (a.totalXP || 0);
   });
 
+  // Reset page when search changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.ceil(sortedLeads.length / itemsPerPage);
+  const paginatedLeads = sortedLeads.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   // Advance lead to next pipeline stage
   const advanceStage = async (lead: Lead) => {
     if (!lead.id) return;
@@ -208,19 +219,19 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
         <div>
           <h2 className="text-xl font-black uppercase tracking-wider text-army-gold">Mission Control</h2>
           <p className="text-[10px] font-mono text-zinc-500 uppercase">Pipeline Progression & XP Management</p>
         </div>
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
             type="text"
             placeholder="Search leads..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 text-sm text-white outline-none focus:border-army-gold w-64"
+            className="pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 text-sm text-white outline-none focus:border-army-gold w-full sm:w-64"
           />
         </div>
       </div>
@@ -318,7 +329,7 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
           { label: 'Enlisted', count: leads.filter(l => (l.pipelineStage || 0) >= 7).length, color: 'text-army-gold' },
           { label: 'Complete', count: leads.filter(l => (l.pipelineStage || 0) >= 10).length, color: 'text-white' },
         ].map(s => (
-          <div key={s.label} className="bg-zinc-900/50 border border-zinc-800/50 p-3 text-center">
+          <div key={s.label} className="bg-zinc-900/50 border border-zinc-800/50 p-3 text-center flex flex-col items-center justify-center">
             <div className={cn("text-xl font-black", s.color)}>{s.count}</div>
             <div className="text-[8px] font-mono uppercase text-zinc-600">{s.label}</div>
           </div>
@@ -333,13 +344,13 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
           </div>
         )}
 
-        {sortedLeads.map(lead => {
+        {paginatedLeads.map(lead => {
           const totalXP = lead.totalXP || 0;
           const level = getLevelFromXP(totalXP);
           const tier = getTierForLevel(level);
           const rankDisplay = getLevelDisplay(level);
           const currentStage = lead.pipelineStage || 0;
-          const nextStage = currentStage < PIPELINE_STAGES.length ? PIPELINE_STAGES[currentStage] : null;
+          const nextStage = currentStage >= 0 && currentStage < PIPELINE_STAGES.length ? PIPELINE_STAGES[currentStage] : null;
           const isExpanded = expandedLead === lead.id;
           const isUpdating = updating === lead.id;
 
@@ -353,7 +364,7 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
               {/* Lead Row */}
               <button
                 onClick={() => setExpandedLead(isExpanded ? null : lead.id || null)}
-                className="w-full flex items-center gap-3 p-4 text-left hover:bg-white/5 transition-all"
+                className="w-full flex flex-col sm:flex-row items-center gap-3 p-4 text-center sm:text-left hover:bg-white/5 transition-all"
               >
                 {/* Level Badge */}
                 <div
@@ -364,8 +375,8 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
                 </div>
 
                 {/* Name & Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 flex flex-col items-center sm:items-start w-full">
+                  <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2">
                     <span className="font-black text-sm truncate">{lead.firstName} {lead.lastName}</span>
                     {lead.slug && (
                       <span className="text-[8px] px-1.5 py-0.5 bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20 rounded font-mono">
@@ -378,7 +389,7 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] text-zinc-500 truncate">{lead.email}</div>
+                  <div className="text-[10px] text-zinc-500 truncate w-full">{lead.email}</div>
                 </div>
 
                 {/* Rank Display + XP Progress */}
@@ -409,16 +420,20 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
                 </div>
 
                 {/* Pipeline Stage */}
-                <div className="text-right flex-shrink-0">
+                <div className="text-center sm:text-right flex-shrink-0 mt-2 sm:mt-0">
                   <div className="text-[10px] font-black text-army-gold">
                     Stage {currentStage}/{PIPELINE_STAGES.length}
                   </div>
                   <div className="text-[9px] text-zinc-500">
-                    {currentStage > 0 ? PIPELINE_STAGES[currentStage - 1].label : 'Not Started'}
+                    {currentStage > 0 
+                      ? (currentStage <= PIPELINE_STAGES.length 
+                          ? PIPELINE_STAGES[currentStage - 1].label 
+                          : 'Pipeline Complete') 
+                      : 'Not Started'}
                   </div>
                 </div>
 
-                <ChevronRight className={cn("w-4 h-4 text-zinc-600 transition-transform flex-shrink-0", isExpanded && "rotate-90")} />
+                <ChevronRight className={cn("w-4 h-4 text-zinc-600 transition-transform flex-shrink-0 hidden sm:block", isExpanded && "rotate-90")} />
               </button>
 
               {/* Expanded Detail */}
@@ -462,9 +477,9 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
 
                       {/* Rank & XP Profile */}
                       <div>
-                        <div className="text-[10px] font-black uppercase text-zinc-500 mb-3">Rank & XP Profile</div>
+                        <div className="text-[10px] font-black uppercase text-zinc-500 mb-3 text-center sm:text-left">Rank & XP Profile</div>
                         <div className="bg-zinc-900/50 border border-zinc-800 rounded p-4">
-                          <div className="flex items-center gap-4 mb-3">
+                          <div className="flex flex-col sm:flex-row items-center gap-4 mb-3 text-center sm:text-left">
                             <div
                               className={cn("w-14 h-14 rounded-lg border-2 flex items-center justify-center text-lg font-black", tier.borderColor, tier.color)}
                               style={{ boxShadow: `0 0 12px ${tier.glowColor}` }}
@@ -507,63 +522,77 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
 
                       {/* Recruit Contact Info */}
                       <div>
-                        <div className="text-[10px] font-black uppercase text-zinc-500 mb-3">Recruit Profile</div>
+                        <div className="text-[10px] font-black uppercase text-zinc-500 mb-3 text-center sm:text-left">Recruit Profile</div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          <div className="flex items-center gap-2 text-xs">
+                          <div className="flex items-center justify-center sm:justify-start gap-2 text-xs">
                             <Phone className="w-3.5 h-3.5 text-army-gold flex-shrink-0" />
                             <span className="text-zinc-400">Phone:</span>
                             <a href={`tel:${lead.phone}`} className="text-neon-cyan font-bold hover:underline">{lead.phone || 'N/A'}</a>
                           </div>
-                          <div className="flex items-center gap-2 text-xs">
+                          <div className="flex items-center justify-center sm:justify-start gap-2 text-xs">
                             <Mail className="w-3.5 h-3.5 text-army-gold flex-shrink-0" />
                             <span className="text-zinc-400">Email:</span>
                             <a href={`mailto:${lead.email}`} className="text-neon-cyan font-bold hover:underline truncate">{lead.email || 'N/A'}</a>
                           </div>
                           {lead.age && (
-                            <div className="flex items-center gap-2 text-xs">
+                            <div className="flex items-center justify-center sm:justify-start gap-2 text-xs">
                               <Calendar className="w-3.5 h-3.5 text-army-gold flex-shrink-0" />
                               <span className="text-zinc-400">Age:</span>
                               <span className="text-zinc-300 font-bold">{lead.age}</span>
                             </div>
                           )}
                           {lead.education && (
-                            <div className="flex items-center gap-2 text-xs">
+                            <div className="flex items-center justify-center sm:justify-start gap-2 text-xs">
                               <GraduationCap className="w-3.5 h-3.5 text-army-gold flex-shrink-0" />
                               <span className="text-zinc-400">Education:</span>
                               <span className="text-zinc-300 font-bold">{lead.education}</span>
                             </div>
                           )}
                           {lead.interest && (
-                            <div className="flex items-center gap-2 text-xs">
+                            <div className="flex items-center justify-center sm:justify-start gap-2 text-xs">
                               <Briefcase className="w-3.5 h-3.5 text-army-gold flex-shrink-0" />
                               <span className="text-zinc-400">Interest:</span>
                               <span className="text-zinc-300 font-bold">{lead.interest}</span>
                             </div>
                           )}
                           {lead.source && (
-                            <div className="flex items-center gap-2 text-xs">
+                            <div className="flex items-center justify-center sm:justify-start gap-2 text-xs">
                               <Search className="w-3.5 h-3.5 text-army-gold flex-shrink-0" />
                               <span className="text-zinc-400">Source:</span>
                               <span className="text-zinc-300 font-bold">{lead.source}</span>
                             </div>
                           )}
                         </div>
-                        {lead.notes && (
-                          <div className="mt-3 p-3 bg-zinc-800/50 border border-zinc-700/30 rounded text-xs text-zinc-400">
+                        {lead.notes && Array.isArray(lead.notes) && lead.notes.length > 0 && (
+                          <div className="mt-3 p-3 bg-zinc-800/50 border border-zinc-700/30 rounded text-xs text-zinc-400 text-center sm:text-left space-y-2">
+                            <span className="text-zinc-500 font-black uppercase text-[9px]">Notes: </span>
+                            {lead.notes.map((n: any, i: number) => (
+                              <div key={i} className="bg-zinc-900/50 p-2 border-l-2 border-army-gold">
+                                <p className="text-xs text-white">{n.text}</p>
+                                <div className="flex justify-between mt-1">
+                                  <span className="text-[8px] text-zinc-500">{n.author}</span>
+                                  <span className="text-[8px] text-zinc-500">{new Date(n.timestamp).toLocaleDateString()}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {lead.notes && typeof lead.notes === 'string' && (
+                          <div className="mt-3 p-3 bg-zinc-800/50 border border-zinc-700/30 rounded text-xs text-zinc-400 text-center sm:text-left">
                             <span className="text-zinc-500 font-black uppercase text-[9px]">Notes: </span>{lead.notes}
                           </div>
                         )}
                       </div>
 
                       {/* Actions */}
-                      <div className="flex flex-wrap gap-3 items-end">
+                      <div className="flex flex-wrap gap-3 items-center sm:items-end justify-center sm:justify-start">
                         {/* Advance Stage Button */}
                         {nextStage && (
                           <button
                             onClick={() => advanceStage(lead)}
                             disabled={isUpdating}
                             className={cn(
-                              "flex items-center gap-2 px-4 py-2 font-black uppercase text-xs tracking-wider transition-all",
+                              "flex items-center justify-center gap-2 px-4 py-2 font-black uppercase text-xs tracking-wider transition-all w-full sm:w-auto",
                               "bg-army-gold text-army-black hover:scale-105 active:scale-95 disabled:opacity-50"
                             )}
                           >
@@ -578,13 +607,13 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
                         )}
 
                         {currentStage >= PIPELINE_STAGES.length && (
-                          <div className="px-4 py-2 bg-neon-green/10 border border-neon-green/30 text-neon-green font-black uppercase text-xs">
+                          <div className="px-4 py-2 bg-neon-green/10 border border-neon-green/30 text-neon-green font-black uppercase text-xs w-full sm:w-auto text-center">
                             Pipeline Complete
                           </div>
                         )}
 
                         {/* Bonus XP */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-center gap-2 w-full sm:w-auto">
                           <input
                             type="number"
                             min="0"
@@ -597,7 +626,7 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
                           <button
                             onClick={() => grantBonusXP(lead)}
                             disabled={isUpdating || !(bonusXPAmount[lead.id || ''] > 0)}
-                            className="flex items-center gap-1 px-3 py-2 bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-xs font-black uppercase disabled:opacity-30 hover:bg-neon-cyan/20 transition-all"
+                            className="flex items-center justify-center gap-1 px-3 py-2 bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-xs font-black uppercase disabled:opacity-30 hover:bg-neon-cyan/20 transition-all flex-1 sm:flex-none"
                           >
                             <Zap className="w-3 h-3" /> Grant XP
                           </button>
@@ -626,6 +655,29 @@ export const MissionControl = ({ leads, recruiterUid, userRole }: MissionControl
           );
         })}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 mt-8 pb-4">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="p-2 bg-zinc-900 border border-zinc-800 rounded text-zinc-400 disabled:opacity-50 hover:bg-zinc-800 transition-colors hover:text-army-gold"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <span className="text-xs font-mono text-zinc-500 uppercase tracking-widest">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="p-2 bg-zinc-900 border border-zinc-800 rounded text-zinc-400 disabled:opacity-50 hover:bg-zinc-800 transition-colors hover:text-army-gold"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

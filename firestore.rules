@@ -9,8 +9,8 @@ service cloud.firestore {
     // Assumed Data Model
     // ===============================================================
     //
-    // Collection: leads
-    // Document ID: auto-generated
+    // Collection: players
+    // Document ID: email (lowercase)
     // Fields:
     //   - timestamp: string (required, ISO 8601)
     //   - firstName: string (required)
@@ -25,6 +25,8 @@ service cloud.firestore {
     //   - source: string (optional)
     //   - mos: string (optional)
     //   - recruiterId: string (optional)
+    //   - stage: number (optional)
+    //   - documents: list (optional)
     //
     // ===============================================================
 
@@ -48,7 +50,7 @@ service cloud.firestore {
       return isAuthenticated() && data.recruiterId == request.auth.uid;
     }
 
-    function isValidLead(data) {
+    function isValidPlayer(data) {
       return data.keys().hasAll(['timestamp', 'firstName', 'lastName', 'email', 'phone', 'status']) &&
              data.firstName is string && data.firstName.size() > 0 && data.firstName.size() < 100 &&
              data.lastName is string && data.lastName.size() > 0 && data.lastName.size() < 100 &&
@@ -68,14 +70,15 @@ service cloud.firestore {
     // Rules
     // ===============================================================
 
-    match /leads/{leadId} {
-      // Anyone can submit a lead (create)
-      allow create: if isValidLead(request.resource.data);
+    match /players/{email} {
+      // Anyone can submit a player (create)
+      allow create: if isValidPlayer(request.resource.data);
       
-      // Admins can read/update/delete all. Recruiters can read/update their own leads.
-      allow read: if isAdmin() || isAssignedRecruiter(resource.data);
-      allow update: if isAdmin() || (isAssignedRecruiter(resource.data) && isAssignedRecruiter(request.resource.data) && isValidLead(request.resource.data));
-      allow delete: if isAdmin();
+      // Admins can read/update/delete all. Recruiters can read/update/delete their own players.
+      // Players can read/update their own data.
+      allow read: if isAdmin() || isAssignedRecruiter(resource.data) || (isAuthenticated() && request.auth.token.email.lower() == email);
+      allow update: if isAdmin() || (isAssignedRecruiter(resource.data) && isAssignedRecruiter(request.resource.data) && isValidPlayer(request.resource.data)) || (isAuthenticated() && request.auth.token.email.lower() == email);
+      allow delete: if isAdmin() || isAssignedRecruiter(resource.data);
     }
 
     match /subscriptions/{subId} {
@@ -89,8 +92,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      // Users can read their own profile, admins can read all
-      allow read: if (isAuthenticated() && request.auth.uid == userId) || isAdmin();
+      // Anyone can read users (needed for landing page slug queries)
+      allow read: if true;
       
       // Users can create their own profile with role 'pending', or with their pre-approved role
       allow create: if (isAuthenticated() && request.auth.uid == userId && 
@@ -103,14 +106,15 @@ service cloud.firestore {
                     )) || isAdmin();
                     
       // Only admins can update user roles
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (isAuthenticated() && request.auth.uid == userId && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
     }
 
     match /pre_approved_users/{email} {
       // Admins can manage pre-approved users
       allow read, write: if isAdmin();
       // Users can read their own pre-approval
-      allow read: if isAuthenticated() && request.auth.token.email == email;
+      allow read: if isAuthenticated() && request.auth.token.email.lower() == email;
     }
   }
 }

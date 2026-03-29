@@ -15,6 +15,10 @@ import { ASVABPage } from './ASVABPage';
 import { RankUpPage } from './RankUpPage';
 import { TermsPage } from './TermsPage';
 import { PrivacyPage } from './PrivacyPage';
+import { RecruiterDashboardVanguard } from './RecruiterDashboardVanguard';
+import { CandidatePipelineVanguard } from './CandidatePipelineVanguard';
+import { CandidateIntakeVanguard } from './CandidateIntakeVanguard';
+import { PlayerDashboard } from './PlayerDashboard';
 import { useXP } from './useXP';
 import { XPBar } from './XPBar';
 
@@ -45,7 +49,7 @@ function AppRoutes() {
     }
   }, [location.pathname]);
 
-  const isDashboard = location.pathname === '/dashboard';
+  const isDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/vanguard') || location.pathname.startsWith('/player');
 
   return (
     <main className="bg-army-black text-white selection:bg-army-gold selection:text-army-black">
@@ -69,7 +73,7 @@ function AppRoutes() {
         <Route
           path="/"
           element={
-            <LandingPage onDashboardClick={() => navigate('/dashboard')} />
+            <LandingPage onDashboardClick={() => navigate('/dashboard')} onPlayerLogin={() => navigate('/player')} />
           }
         />
         <Route
@@ -77,6 +81,24 @@ function AppRoutes() {
           element={
             <RecruiterDashboard onBack={() => navigate(`/${slugQuery}`)} />
           }
+        />
+        <Route
+          path="/player"
+          element={
+            <PlayerDashboard onBack={() => navigate(`/${slugQuery}`)} />
+          }
+        />
+        <Route
+          path="/vanguard/dashboard"
+          element={<RecruiterDashboardVanguard />}
+        />
+        <Route
+          path="/vanguard/pipeline"
+          element={<CandidatePipelineVanguard />}
+        />
+        <Route
+          path="/vanguard/intake"
+          element={<CandidateIntakeVanguard />}
         />
         <Route
           path="/faq"
@@ -131,8 +153,7 @@ function AppRoutes() {
           element={
             <PrivacyPage onBack={() => navigate(`/${slugQuery}`)} slugParam={slugParam} />
           }
-        />
-      </Routes>
+        />            </Routes>
     </main>
   );
 }

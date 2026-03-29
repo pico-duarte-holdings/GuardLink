@@ -17,7 +17,6 @@ import { cn } from './lib/utils';
 import { MOS_DATA, Interaction } from './types';
 import { SharedChatbot } from './SharedChatbot';
 import { SharedLeadCapture } from './SharedLeadCapture';
-import { BasicTrainingGame } from './BasicTrainingGame';
 import { SharedFooter } from './SharedFooter';
 import GuardLinkIcon from './GuardLinkIcon';
 
@@ -69,7 +68,7 @@ const GENERIC_PROFILE = {
 
 // --- Components ---
 
-const Navbar = ({ onDashboardClick, slugQuery }: { onDashboardClick: () => void; slugQuery: string }) => {
+const Navbar = ({ onDashboardClick, onPlayerLogin, slugQuery }: { onDashboardClick: () => void; onPlayerLogin: () => void; slugQuery: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -128,6 +127,7 @@ const Navbar = ({ onDashboardClick, slugQuery }: { onDashboardClick: () => void;
           <div className="h-8 w-px bg-zinc-800/50" />
 
           <div className="flex items-center gap-3">
+            <button onClick={onPlayerLogin} className="text-[9px] text-zinc-400 hover:text-army-gold transition-colors uppercase font-black font-mono mr-2">Player_Login</button>
             <button onClick={onDashboardClick} className="text-[9px] text-zinc-600 hover:text-army-gold transition-colors uppercase font-black font-mono mr-2">Admin_Login</button>
             <a
               href="#register"
@@ -140,6 +140,14 @@ const Navbar = ({ onDashboardClick, slugQuery }: { onDashboardClick: () => void;
         </div>
 
         <div className="flex items-center gap-4 lg:hidden">
+          <button 
+            onClick={onPlayerLogin} 
+            className="text-[10px] text-zinc-400 hover:text-army-gold transition-colors uppercase font-black font-mono flex items-center gap-1.5"
+            aria-label="Player Login"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            Player
+          </button>
           <button 
             onClick={onDashboardClick} 
             className="text-[10px] text-zinc-400 hover:text-army-gold transition-colors uppercase font-black font-mono flex items-center gap-1.5"
@@ -789,14 +797,16 @@ const SubscriptionSection = ({ onTrack, recruiterId }: { onTrack: (el: string) =
     }
 
     try {
-      await addDoc(collection(db, 'subscriptions'), { 
-        name: formData.name,
+      await addDoc(collection(db, 'leads'), { 
+        firstName: formData.name.split(' ')[0] || '',
+        lastName: formData.name.split(' ').slice(1).join(' ') || '',
         email: formData.email,
         phone: formData.phone,
         optIn: formData.optIn,
-        timestamp: new Date().toISOString(), 
+        createdAt: new Date().toISOString(), 
         status: 'New', 
-        recruiterId: recruiterId 
+        recruiterId: recruiterId,
+        source: 'Landing Page'
       });
       setStatus('success');
       onTrack('Subscription: Success');
@@ -834,8 +844,7 @@ const SubscriptionSection = ({ onTrack, recruiterId }: { onTrack: (el: string) =
 };
 
 
-
-export const LandingPage = ({ onDashboardClick }: { onDashboardClick: () => void }) => {
+export const LandingPage = ({ onDashboardClick, onPlayerLogin }: { onDashboardClick: () => void; onPlayerLogin: () => void }) => {
   const [searchParams] = useSearchParams();
   const slugParam = searchParams.get('r') || '';
   const slugQuery = slugParam ? `?r=${slugParam}` : '';
@@ -844,7 +853,6 @@ export const LandingPage = ({ onDashboardClick }: { onDashboardClick: () => void
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [profile, setProfile] = useState(GENERIC_PROFILE);
   const hasSlug = !!slugParam;
-  const [showGame, setShowGame] = useState(false);
 
   const trackInteraction = (element: string, type: 'click' | 'view' = 'click') => {
     setInteractions(prev => [...prev, { element, timestamp: new Date().toISOString(), type }]);
@@ -915,14 +923,14 @@ export const LandingPage = ({ onDashboardClick }: { onDashboardClick: () => void
   return (
     <div className="min-h-screen bg-army-black text-white font-sans selection:bg-army-gold selection:text-army-black relative">
       <div className="scanline" />
-      <Navbar onDashboardClick={onDashboardClick} slugQuery={slugQuery} />
+      <Navbar onDashboardClick={onDashboardClick} onPlayerLogin={onPlayerLogin} slugQuery={slugQuery} />
       <main>
         <Hero onTrack={trackInteraction} profile={profile} slugQuery={slugQuery} hasSlug={hasSlug} />
         <Testimonials onTrack={trackInteraction} />
         <Benefits onTrack={trackInteraction} />
         <MOSExplorer onTrack={trackInteraction} />
         <PayCalculator />
-        <SharedLeadCapture slugParam={slugParam} source="Website" recruiterId={profile.uid} />
+        <SharedLeadCapture slugParam={slugParam} source="Website" recruiterId={profile.uid} onComplete={() => {}} />
       </main>
       <SharedFooter slugParam={slugParam} />
 
@@ -941,40 +949,6 @@ export const LandingPage = ({ onDashboardClick }: { onDashboardClick: () => void
         {isMuted ? <VolumeX className="w-5 h-5 text-zinc-500" /> : <Volume2 className="w-5 h-5 text-army-gold animate-pulse" />}
       </button>
 
-      {/* Mini-Game Launcher */}
-      <button
-        onClick={() => setShowGame(true)}
-        className="fixed bottom-36 right-8 z-30 group"
-        title="Play Basic Training"
-      >
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-neon-cyan/20 to-army-black border-2 border-neon-cyan/40 flex items-center justify-center hover:border-neon-cyan hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="group-hover:scale-110 transition-transform">
-            <path d="M3 4h14l-2 12H5L3 4z" stroke="#00f2ff" strokeWidth="1.5" fill="none"/>
-            <circle cx="7" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
-            <circle cx="13" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
-            <path d="M10 2v3" stroke="#00f2ff" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap text-[8px] font-black uppercase tracking-widest text-neon-cyan bg-neon-cyan/10 border border-neon-cyan/20 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-          Play Drill
-        </span>
-      </button>
-
-      {/* Basic Training Game Overlay */}
-      <AnimatePresence>
-        {showGame && (
-          <BasicTrainingGame
-            onClose={() => setShowGame(false)}
-            onGameComplete={(score) => {
-              // Grant XP for playing
-              window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-play' } }));
-              if (score >= 1500) {
-                window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-highscore' } }));
-              }
-            }}
-          />
-        )}
-      </AnimatePresence>
 
       {/* Shared AI Chatbot */}
       <SharedChatbot slugParam={slugParam} />

@@ -5,23 +5,22 @@ This code, design, and associated assets may not be reproduced, distributed, or 
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, Zap, Share2, Crosshair, Users, ChevronDown, ChevronUp, Gamepad2, Star } from 'lucide-react';
+import { Trophy, Zap, Share2, Crosshair, Users, ChevronDown, ChevronUp, Star } from 'lucide-react';
 import { SharedNavbar } from './SharedNavbar';
 import { SharedFooter } from './SharedFooter';
 import { FloatingCTA } from './FloatingCTA';
 import { SharedChatbot } from './SharedChatbot';
 import { SharedLeadCapture } from './SharedLeadCapture';
-import { BasicTrainingGame } from './BasicTrainingGame';
 import { TIERS, PIPELINE_STAGES, getXPTable, getTierForLevel, getLevelDisplay, type Tier } from './useXP';
 import { cn } from './lib/utils';
 
 // --- Tier Card ---
-const TierCard = ({ tier, levels, isExpanded, onToggle }: {
+const TierCard: React.FC<{
   tier: Tier;
   levels: ReturnType<typeof getXPTable>;
   isExpanded: boolean;
   onToggle: () => void;
-}) => (
+}> = ({ tier, levels, isExpanded, onToggle }) => (
   <div className={cn("border rounded-lg overflow-hidden transition-all", tier.borderColor, "border-opacity-40")}>
     <button
       onClick={onToggle}
@@ -115,7 +114,6 @@ const XPActions = () => {
 
         <div className="hud-border p-5 border-zinc-700">
           <div className="flex items-center gap-2 mb-4">
-            <Gamepad2 className="w-5 h-5 text-army-gold" />
             <h4 className="text-sm font-black uppercase tracking-wider text-army-gold">Games</h4>
           </div>
           <div className="space-y-2">
@@ -218,21 +216,19 @@ export const RankUpPage = ({
   slugParam: string;
 }) => {
   const [expandedTier, setExpandedTier] = useState<number | null>(null);
-  const [showGame, setShowGame] = useState(false);
-  const [activeSection, setActiveSection] = useState<'ranks' | 'xp' | 'buddies' | 'games'>('ranks');
+  const [activeSection, setActiveSection] = useState<'ranks' | 'xp' | 'buddies'>('ranks');
   const xpTable = getXPTable();
 
   const sectionTabs = [
     { key: 'ranks' as const, label: 'Ranks & Tiers', icon: Trophy },
     { key: 'xp' as const, label: 'Earn XP', icon: Zap },
     { key: 'buddies' as const, label: 'Stripes for Buddies', icon: Users },
-    { key: 'games' as const, label: 'Mini-Games', icon: Gamepad2 },
   ];
 
   return (
     <div className="min-h-screen bg-army-black text-white font-sans selection:bg-army-gold selection:text-army-black relative">
       <div className="scanline" />
-      <SharedNavbar slugParam={slugParam} onBack={onBack} />
+      <SharedNavbar slugParam={slugParam} onBack={onBack} title="Rank Up" />
 
       <main className="pt-28 pb-24">
         <div className="max-w-5xl mx-auto px-4">
@@ -284,90 +280,10 @@ export const RankUpPage = ({
           {activeSection === 'xp' && <XPActions />}
 
           {activeSection === 'buddies' && <StripesForBuddies />}
-
-          {activeSection === 'games' && (
-            <div className="space-y-6">
-              <h3 className="text-2xl font-black uppercase italic tracking-tight">MINI <span className="text-neon-cyan">GAMES</span></h3>
-              <p className="text-sm text-zinc-400">
-                Play games, earn XP, and stay on the site longer than your friends. More games coming soon.
-              </p>
-
-              {/* Basic Training Card */}
-              <div className="hud-border p-6 border-neon-cyan/30 flex flex-col sm:flex-row items-center gap-6">
-                <div className="w-20 h-20 rounded-lg border-2 border-neon-cyan/40 bg-neon-cyan/10 flex items-center justify-center flex-shrink-0">
-                  <Crosshair className="w-10 h-10 text-neon-cyan" />
-                </div>
-                <div className="flex-1 text-center sm:text-left">
-                  <h4 className="text-xl font-black uppercase tracking-tight">Basic Training</h4>
-                  <p className="text-xs text-zinc-400 mt-1">Reaction time drill. Tap targets, dodge decoys, build combos. Earn up to 105 XP per play.</p>
-                  <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
-                    <span className="text-[9px] px-2 py-1 bg-neon-green/10 text-neon-green font-black uppercase rounded">+30 XP per play</span>
-                    <span className="text-[9px] px-2 py-1 bg-army-gold/10 text-army-gold font-black uppercase rounded">+75 XP high score bonus</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowGame(true)}
-                  className="btn-gaming px-8 py-3 text-sm font-black uppercase italic flex-shrink-0"
-                >
-                  PLAY NOW
-                </button>
-              </div>
-
-              {/* Placeholder for future games */}
-              <div className="hud-border p-6 border-zinc-700/30 flex flex-col sm:flex-row items-center gap-6 opacity-50">
-                <div className="w-20 h-20 rounded-lg border-2 border-zinc-600 bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                  <Gamepad2 className="w-10 h-10 text-zinc-600" />
-                </div>
-                <div className="flex-1 text-center sm:text-left">
-                  <h4 className="text-xl font-black uppercase tracking-tight text-zinc-500">More Games Coming Soon</h4>
-                  <p className="text-xs text-zinc-600 mt-1">New challenges, new ways to earn XP. Stay tuned.</p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
-
-        {/* Lead Capture */}
-        <SharedLeadCapture slugParam={slugParam} source="rank-up" title="READY TO RANK UP FOR REAL?" subtitle="// START_YOUR_PIPELINE //" />
       </main>
 
       <SharedFooter slugParam={slugParam} />
-      <FloatingCTA slugParam={slugParam} />
-      <SharedChatbot slugParam={slugParam} />
-
-      {/* Mini-Game Launcher Icon */}
-      <button
-        onClick={() => setShowGame(true)}
-        className="fixed bottom-36 right-8 z-30 group"
-        title="Play Basic Training"
-      >
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-neon-cyan/20 to-army-black border-2 border-neon-cyan/40 flex items-center justify-center hover:border-neon-cyan hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="group-hover:scale-110 transition-transform">
-            <path d="M3 4h14l-2 12H5L3 4z" stroke="#00f2ff" strokeWidth="1.5" fill="none"/>
-            <circle cx="7" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
-            <circle cx="13" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
-            <path d="M10 2v3" stroke="#00f2ff" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap text-[8px] font-black uppercase tracking-widest text-neon-cyan bg-neon-cyan/10 border border-neon-cyan/20 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-          Play Drill
-        </span>
-      </button>
-
-      {/* Game Overlay */}
-      <AnimatePresence>
-        {showGame && (
-          <BasicTrainingGame
-            onClose={() => setShowGame(false)}
-            onGameComplete={(score) => {
-              window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-play' } }));
-              if (score >= 1500) {
-                window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-highscore' } }));
-              }
-            }}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 };

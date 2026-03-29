@@ -26,5 +26,6 @@ This code, design, and associated assets may not be reproduced, distributed, or 
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": ["dist", "public"]
 }

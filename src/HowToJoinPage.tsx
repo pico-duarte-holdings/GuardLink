@@ -11,7 +11,6 @@ import { FloatingCTA } from './FloatingCTA';
 import { SharedChatbot } from './SharedChatbot';
 import { SharedLeadCapture } from './SharedLeadCapture';
 import { EligibilityChecker } from './LandingPage';
-import { BasicTrainingGame } from './BasicTrainingGame';
 
 const HowToJoin = () => {
   const steps = [
@@ -56,52 +55,19 @@ export const HowToJoinPage = ({
   slugParam: string;
 }) => {
   const slugQuery = slugParam ? '?r=' + slugParam : '';
-  const [showGame, setShowGame] = useState(false);
 
   return (
     <div className="min-h-screen bg-army-black text-white font-sans selection:bg-army-gold selection:text-army-black relative">
       <div className="scanline" />
-      <SharedNavbar slugParam={slugParam} onBack={onBack} />
+      <SharedNavbar slugParam={slugParam} onBack={onBack} title="How to Join" />
       <main className="pt-20">
         <EligibilityChecker onTrack={() => {}} />
         <HowToJoin />
-        <SharedLeadCapture slugParam={slugParam} source="how-to-join" title="READY TO JOIN?" subtitle="// START_YOUR_MISSION //" />
+        <SharedLeadCapture slugParam={slugParam} source="how-to-join" onComplete={() => {}} />
       </main>
 
-      {/* Mini-Game Launcher Icon */}
-      <button
-        onClick={() => setShowGame(true)}
-        className="fixed bottom-36 right-8 z-30 group"
-        title="Play Basic Training"
-      >
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-neon-cyan/20 to-army-black border-2 border-neon-cyan/40 flex items-center justify-center hover:border-neon-cyan hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="group-hover:scale-110 transition-transform">
-            <path d="M3 4h14l-2 12H5L3 4z" stroke="#00f2ff" strokeWidth="1.5" fill="none"/>
-            <circle cx="7" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
-            <circle cx="13" cy="10" r="2" fill="#00f2ff" opacity="0.6"/>
-            <path d="M10 2v3" stroke="#00f2ff" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap text-[8px] font-black uppercase tracking-widest text-neon-cyan bg-neon-cyan/10 border border-neon-cyan/20 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-          Play Drill
-        </span>
-      </button>
-      <AnimatePresence>
-        {showGame && (
-          <BasicTrainingGame
-            onClose={() => setShowGame(false)}
-            onGameComplete={(score) => {
-              window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-play' } }));
-              if (score >= 1500) {
-                window.dispatchEvent(new CustomEvent('guardlink:xp-grant', { detail: { action: 'mini-game-highscore' } }));
-              }
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      <SharedFooter slugParam={slugParam} />
-      <FloatingCTA />
+      <SharedFooter />
+      <FloatingCTA slugParam={slugParam} onClick={() => {}} text="Join Now" />
       <SharedChatbot slugParam={slugParam} />
     </div>
   );

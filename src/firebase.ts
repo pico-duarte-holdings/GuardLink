@@ -5,14 +5,20 @@ This code, design, and associated assets may not be reproduced, distributed, or 
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
-export const storage = getStorage(app);
+
+export let storage: FirebaseStorage | null = null;
+try {
+  storage = getStorage(app);
+} catch (e) {
+  console.warn("Firebase Storage is not available:", e);
+}
 
 export enum OperationType {
   CREATE = 'create',
