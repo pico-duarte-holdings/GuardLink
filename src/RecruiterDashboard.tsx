@@ -15,7 +15,7 @@ import { MissionControl } from './MissionControl';
 import { capitalizeFirst, toUpper } from './lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
-import { onSnapshot, collection, query, orderBy, updateDoc, doc, setDoc, deleteDoc, addDoc, getDoc, where } from 'firebase/firestore';
+import { onSnapshot, collection, query, orderBy, updateDoc, doc, setDoc, deleteDoc, addDoc, getDoc, where, writeBatch } from 'firebase/firestore';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { db, auth, storage } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -66,6 +66,8 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [csvAssignee, setCsvAssignee] = useState('');
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [newNote, setNewNote] = useState('');
 
   const [profileData, setProfileData] = useState({
@@ -279,6 +281,11 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
     } catch (err: any) { alert("Error: " + err.message); }
   };
 
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
+
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !auth.currentUser) return;
@@ -304,26 +311,48 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
       const startIdx = rows[0].toLowerCase().includes('email') ? 1 : 0;
       const MAX_ROWS = 500;
       if (rows.length - startIdx > MAX_ROWS) { alert(`CSV too large. Max ${MAX_ROWS} rows.`); return; }
+
+      // Close modal immediately — import runs in background
+      setShowCSVModal(false);
+      setCsvImporting(true);
+      showToast(`Importing ${rows.length - startIdx} leads…`);
+
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       let count = 0;
       let skipped = 0;
-      for (let i = startIdx; i < rows.length; i++) {
-        const cols = rows[i].split(',');
-        if (cols.length >= 2) {
-          const email = cols[2]?.replace(/["']/g, '').trim() || '';
-          if (email && !emailRegex.test(email)) { skipped++; continue; }
-          try {
-            await addDoc(collection(db, 'leads'), {
+
+      // Batch writes — up to 500 per batch (Firestore limit)
+      try {
+        let batch = writeBatch(db);
+        let batchCount = 0;
+        for (let i = startIdx; i < rows.length; i++) {
+          const cols = rows[i].split(',');
+          if (cols.length >= 2) {
+            const email = cols[2]?.replace(/["']/g, '').trim() || '';
+            if (email && !emailRegex.test(email)) { skipped++; continue; }
+            const newRef = doc(collection(db, 'leads'));
+            batch.set(newRef, {
               firstName: cols[0]?.replace(/["']/g, '').trim() || 'Unknown', lastName: cols[1]?.replace(/["']/g, '').trim() || '',
               email, phone: cols[3]?.replace(/["']/g, '').trim() || '',
               source: 'CSV Import', status: 'New', mos: 'TBD', timestamp: new Date().toISOString(),
               recruiterId: targetUid, recruiterName: targetName, platoon: targetPlatoon
             });
             count++;
-          } catch (err) {}
+            batchCount++;
+            if (batchCount === 500) {
+              await batch.commit();
+              batch = writeBatch(db);
+              batchCount = 0;
+            }
+          }
         }
+        if (batchCount > 0) await batch.commit();
+        showToast(`Imported ${count} leads${skipped > 0 ? ` (${skipped} skipped)` : ''}`, 'success');
+      } catch (err: any) {
+        showToast(`Import failed: ${err.message}`, 'error');
       }
-      alert(`Imported ${count} records${skipped > 0 ? ` (${skipped} skipped — invalid email)` : ''}!`); setShowCSVModal(false); setCsvAssignee('');
+      setCsvImporting(false);
+      setCsvAssignee('');
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1261,6 +1290,24 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
 
       {/* Shared AI Chatbot */}
       <SharedChatbot slugParam="" />
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className={`fixed bottom-6 right-6 z-[100] px-5 py-3 rounded-lg font-black uppercase text-xs shadow-lg flex items-center gap-3 ${toast.type === 'success' ? 'bg-army-gold text-black' : 'bg-red-600 text-white'}`}
+          >
+            {csvImporting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {!csvImporting && toast.type === 'success' && <CheckCircle className="w-4 h-4" />}
+            {!csvImporting && toast.type === 'error' && <AlertTriangle className="w-4 h-4" />}
+            {toast.message}
+            <button onClick={() => setToast(null)} className="ml-2 opacity-60 hover:opacity-100"><X className="w-3 h-3" /></button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
