@@ -28,6 +28,7 @@ import { LeadIntake } from './LeadIntake';
 import { CampaignManager } from './CampaignManager';
 import { SMSCampaignManager } from './SMSCampaignManager';
 import { PlayerAccessManager } from './PlayerAccessManager';
+import { verifyRecaptcha, annotateLogin } from './lib/recaptcha';
 
 const LEAD_STATUSES = ['New', 'Contacted', 'Appointment', 'ASVAB', 'Physical', 'Waiver', 'Qualified', 'Enlisted'];
 const CHART_COLORS = ['#FFD530', '#00f2ff', '#39ff14', '#a855f7', '#ff0055', '#ffffff'];
@@ -43,6 +44,8 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   const [userSlug, setUserSlug] = useState<string | null>(null);
   const [isCommander, setIsCommander] = useState(false);
   const [error, setError] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
+  const [lastAssessment, setLastAssessment] = useState<string | undefined>();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [team, setTeam] = useState<any[]>([]);
@@ -592,7 +595,25 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
             {userRole === 'pending' ? (
               <p className="text-army-gold text-xs font-mono uppercase bg-army-gold/10 p-4 border border-army-gold/30">Pending Admin Approval.</p>
             ) : !isFirebaseAuthenticated ? (
-              <button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())} className="w-full bg-white text-black py-4 font-black uppercase text-xs">Sign In with Google</button>
+              <button disabled={signingIn} onClick={async () => {
+                setSigningIn(true);
+                try {
+                  const assessment = await verifyRecaptcha('LOGIN');
+                  if (!assessment.allowed) {
+                    setError(`Access denied: ${assessment.reason || 'suspicious activity detected'}`);
+                    setSigningIn(false);
+                    return;
+                  }
+                  setLastAssessment(assessment.assessmentName);
+                  await signInWithPopup(auth, new GoogleAuthProvider());
+                  if (assessment.assessmentName) annotateLogin(assessment.assessmentName, true);
+                } catch (err: any) {
+                  if (lastAssessment) annotateLogin(lastAssessment, false);
+                  if (err?.code !== 'auth/popup-closed-by-user') setError(err?.message || 'Sign-in failed');
+                } finally { setSigningIn(false); }
+              }} className="w-full bg-white text-black py-4 font-black uppercase text-xs disabled:opacity-50">
+                {signingIn ? 'Verifying…' : 'Sign In with Google'}
+              </button>
             ) : error ? (
               <div className="space-y-4">
                 <p className="text-red-400 text-xs font-mono bg-red-500/10 p-4 border border-red-500/30">{error}</p>

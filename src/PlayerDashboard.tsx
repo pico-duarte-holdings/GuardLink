@@ -23,6 +23,7 @@ import { SharedNavbar } from './SharedNavbar';
 import { SharedFooter } from './SharedFooter';
 import GuardLinkIcon from './GuardLinkIcon';
 import { sendTransactionalEmail, emailTemplates } from './lib/brevo';
+import { verifyRecaptcha, annotateLogin } from './lib/recaptcha';
 
 // ==============================
 // Types
@@ -371,8 +372,21 @@ export const PlayerDashboard = ({
     return unsub;
   }, []);
 
+  const [signingIn, setSigningIn] = useState(false);
   const handleSignIn = async () => {
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (err) { console.error('Sign-in error:', err); }
+    setSigningIn(true);
+    try {
+      const assessment = await verifyRecaptcha('LOGIN');
+      if (!assessment.allowed) {
+        console.error('reCAPTCHA blocked login:', assessment.reason);
+        setSigningIn(false);
+        return;
+      }
+      await signInWithPopup(auth, new GoogleAuthProvider());
+      if (assessment.assessmentName) annotateLogin(assessment.assessmentName, true);
+    } catch (err: any) {
+      console.error('Sign-in error:', err);
+    } finally { setSigningIn(false); }
   };
 
   const handleSignOut = async () => {
@@ -632,8 +646,8 @@ export const PlayerDashboard = ({
             <p className="text-[10px] font-mono text-zinc-500 tracking-[0.3em] mb-2">// PLAYER_PORTAL //</p>
             <h1 className="text-2xl font-black text-white mb-2">PLAYER DASHBOARD</h1>
             <p className="text-zinc-400 text-sm mb-8">Sign in with your Google account to access your recruitment portal.</p>
-            <button onClick={handleSignIn} className="w-full py-3 bg-army-gold text-black font-bold rounded-lg hover:bg-army-gold/90 transition-all flex items-center justify-center gap-2">
-              <LogIn className="w-5 h-5" /> Sign In with Google
+            <button disabled={signingIn} onClick={handleSignIn} className="w-full py-3 bg-army-gold text-black font-bold rounded-lg hover:bg-army-gold/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+              <LogIn className="w-5 h-5" /> {signingIn ? 'Verifying\u2026' : 'Sign In with Google'}
             </button>
           </motion.div>
         </div>
