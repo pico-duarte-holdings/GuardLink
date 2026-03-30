@@ -3,24 +3,25 @@ Copyright 2026 Pico Duarte Holdings LLC. All rights reserved.
 This code, design, and associated assets may not be reproduced, distributed, or transmitted in any form or by any means without prior written permission.
 */
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { LandingPage } from './LandingPage';
-import { RecruiterDashboard } from './RecruiterDashboard';
-import { FAQPage } from './FAQPage';
-import { BenefitsPage } from './BenefitsPage';
-import { OfficerPage } from './OfficerPage';
-import { MeetRecruiterPage } from './MeetRecruiterPage';
-import { HowToJoinPage } from './HowToJoinPage';
-import { ASVABPage } from './ASVABPage';
-import { RankUpPage } from './RankUpPage';
-import { TermsPage } from './TermsPage';
-import { PrivacyPage } from './PrivacyPage';
-import { RecruiterDashboardVanguard } from './RecruiterDashboardVanguard';
-import { CandidatePipelineVanguard } from './CandidatePipelineVanguard';
-import { CandidateIntakeVanguard } from './CandidateIntakeVanguard';
-import { PlayerDashboard } from './PlayerDashboard';
 import { useXP } from './useXP';
 import { XPBar } from './XPBar';
+
+const RecruiterDashboard = lazy(() => import('./RecruiterDashboard').then(m => ({ default: m.RecruiterDashboard })));
+const PlayerDashboard = lazy(() => import('./PlayerDashboard').then(m => ({ default: m.PlayerDashboard })));
+const RecruiterDashboardVanguard = lazy(() => import('./RecruiterDashboardVanguard').then(m => ({ default: m.RecruiterDashboardVanguard })));
+const CandidatePipelineVanguard = lazy(() => import('./CandidatePipelineVanguard').then(m => ({ default: m.CandidatePipelineVanguard })));
+const CandidateIntakeVanguard = lazy(() => import('./CandidateIntakeVanguard').then(m => ({ default: m.CandidateIntakeVanguard })));
+const FAQPage = lazy(() => import('./FAQPage').then(m => ({ default: m.FAQPage })));
+const BenefitsPage = lazy(() => import('./BenefitsPage').then(m => ({ default: m.BenefitsPage })));
+const OfficerPage = lazy(() => import('./OfficerPage').then(m => ({ default: m.OfficerPage })));
+const MeetRecruiterPage = lazy(() => import('./MeetRecruiterPage').then(m => ({ default: m.MeetRecruiterPage })));
+const HowToJoinPage = lazy(() => import('./HowToJoinPage').then(m => ({ default: m.HowToJoinPage })));
+const ASVABPage = lazy(() => import('./ASVABPage').then(m => ({ default: m.ASVABPage })));
+const RankUpPage = lazy(() => import('./RankUpPage').then(m => ({ default: m.RankUpPage })));
+const TermsPage = lazy(() => import('./TermsPage').then(m => ({ default: m.TermsPage })));
+const PrivacyPage = lazy(() => import('./PrivacyPage').then(m => ({ default: m.PrivacyPage })));
 
 function AppRoutes() {
   const [searchParams] = useSearchParams();
@@ -69,6 +70,7 @@ function AppRoutes() {
           clearXpPopup={xp.clearXpPopup}
         />
       )}
+      <Suspense fallback={<div className="min-h-screen bg-army-black flex items-center justify-center"><div className="text-army-gold font-black text-xl animate-pulse uppercase tracking-widest">Loading...</div></div>}>
       <Routes>
         <Route
           path="/"
@@ -154,6 +156,7 @@ function AppRoutes() {
             <PrivacyPage onBack={() => navigate(`/${slugQuery}`)} slugParam={slugParam} />
           }
         />            </Routes>
+      </Suspense>
     </main>
   );
 }

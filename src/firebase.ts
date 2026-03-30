@@ -6,12 +6,28 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
+
+// App Check — blocks unauthorized clients from calling Firebase APIs
+// Set VITE_RECAPTCHA_ENTERPRISE_KEY in your .env to enable
+const recaptchaKey = import.meta.env.VITE_RECAPTCHA_ENTERPRISE_KEY;
+if (recaptchaKey) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(recaptchaKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+} else if (import.meta.env.DEV) {
+  // Debug token for local development
+  // @ts-ignore
+  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  console.warn('App Check: using debug token (dev mode). Set VITE_RECAPTCHA_ENTERPRISE_KEY for production.');
+}
 
 export let storage: FirebaseStorage | null = null;
 try {

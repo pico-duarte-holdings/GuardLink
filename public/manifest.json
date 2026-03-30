@@ -1,0 +1,18 @@
+{
+  "name": "GuardLink CRM",
+  "short_name": "GuardLink",
+  "description": "Army National Guard Recruiting CRM",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#FFD530",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

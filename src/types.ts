@@ -21,7 +21,7 @@ export interface Lead {
   mos: string;
   source: string;
   message: string;
-  status: 'New' | 'Contacted' | 'Qualified' | 'Scheduled' | 'Enlisted' | 'Inactive';
+  status: 'New' | 'Contacted' | 'Appointment' | 'ASVAB' | 'Physical' | 'Waiver' | 'Qualified' | 'Enlisted';
   notes?: any[] | string;
   interactions?: Interaction[];
   platoon?: string;

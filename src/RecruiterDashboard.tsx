@@ -20,6 +20,7 @@ import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from
 import { db, auth, storage } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Lead, Subscription } from './types';
+import QRCode from 'qrcode';
 import { cn } from './lib/utils';
 import { Bell } from 'lucide-react';
 import { SharedChatbot } from './SharedChatbot';
@@ -295,14 +296,20 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
       if (!text) return;
       const rows = text.split('\n').filter(row => row.trim() !== '');
       const startIdx = rows[0].toLowerCase().includes('email') ? 1 : 0;
+      const MAX_ROWS = 500;
+      if (rows.length - startIdx > MAX_ROWS) { alert(`CSV too large. Max ${MAX_ROWS} rows.`); return; }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       let count = 0;
+      let skipped = 0;
       for (let i = startIdx; i < rows.length; i++) {
         const cols = rows[i].split(',');
         if (cols.length >= 2) {
+          const email = cols[2]?.replace(/["']/g, '').trim() || '';
+          if (email && !emailRegex.test(email)) { skipped++; continue; }
           try {
             await addDoc(collection(db, 'leads'), {
               firstName: cols[0]?.replace(/["']/g, '').trim() || 'Unknown', lastName: cols[1]?.replace(/["']/g, '').trim() || '',
-              email: cols[2]?.replace(/["']/g, '').trim() || '', phone: cols[3]?.replace(/["']/g, '').trim() || '',
+              email, phone: cols[3]?.replace(/["']/g, '').trim() || '',
               source: 'CSV Import', status: 'New', mos: 'TBD', timestamp: new Date().toISOString(),
               recruiterId: targetUid, recruiterName: targetName, platoon: targetPlatoon
             });
@@ -310,7 +317,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
           } catch (err) {}
         }
       }
-      alert(`Imported ${count} records!`); setShowCSVModal(false); setCsvAssignee('');
+      alert(`Imported ${count} records${skipped > 0 ? ` (${skipped} skipped — invalid email)` : ''}!`); setShowCSVModal(false); setCsvAssignee('');
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -368,6 +375,10 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
       alert("Storage is not configured for this project.");
       return;
     }
+    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (file.size > MAX_SIZE) { alert('File too large. Max 5MB.'); return; }
+    if (!ALLOWED_TYPES.includes(file.type)) { alert('Invalid file type. Use JPEG, PNG, WebP, or GIF.'); return; }
     setIsUploadingPhoto(true);
     try {
       const storageRef = ref(storage, `profile-photos/${auth.currentUser.uid}`);
@@ -485,6 +496,16 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // Reset to page 1 when filters change
   useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, sourceFilter, mosFilter, recruiterFilter, activeTab]);
+
+  const downloadQR = async () => {
+    if (!userSlug) return;
+    const url = `${window.location.origin}/meet?r=${userSlug}`;
+    const dataUrl = await QRCode.toDataURL(url, { width: 500, margin: 2 });
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `QR_${userSlug}.png`;
+    a.click();
+  };
 
   const exportToCSV = (dataToExport: any[]) => {
     if(dataToExport.length === 0) return;
@@ -1001,7 +1022,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
             <div className="p-6 border-b border-army-gold/20 bg-army-gold/5 flex justify-between items-center">
               <h3 className="text-xl font-black uppercase italic tracking-tighter text-army-gold">Profile_Settings</h3>
               <div className="flex items-center gap-4">
-                {userSlug && <a href={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(window.location.origin + '/meet?r=' + userSlug)}`} download target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1 bg-army-gold/10 text-army-gold text-[10px] font-black uppercase"><QrCode className="w-4 h-4" /> Download_QR</a>}
+                {userSlug && <button onClick={downloadQR} className="flex items-center gap-2 px-3 py-1 bg-army-gold/10 text-army-gold text-[10px] font-black uppercase"><QrCode className="w-4 h-4" /> Download_QR</button>}
                 <button onClick={() => setShowProfileModal(false)}><X className="text-zinc-500 hover:text-white" /></button>
               </div>
             </div>
