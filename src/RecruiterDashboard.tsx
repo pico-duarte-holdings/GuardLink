@@ -12,6 +12,7 @@ import {
   Inbox, PhoneCall, BookOpen, Activity, FileWarning, Star, ChevronDown
 } from 'lucide-react';
 import { MissionControl } from './MissionControl';
+import { capitalizeFirst, toUpper } from './lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { onSnapshot, collection, query, orderBy, updateDoc, doc, setDoc, deleteDoc, addDoc, getDoc, where } from 'firebase/firestore';
@@ -147,7 +148,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
             });
           } else {
             if (isMaster) {
-              await setDoc(doc(db, 'users', user.uid), { uid: user.uid, email: user.email, displayName: user.displayName || 'Commander', role: 'admin', platoons: ['HQ', 'C1', 'C2', 'C3', 'C4'], createdAt: new Date().toISOString() });
+              await setDoc(doc(db, 'users', user.uid), { uid: user.uid, email: user.email, displayName: user.displayName || 'Tiguere', role: 'admin', platoons: ['HQ', 'C1', 'C2', 'C3', 'C4'], createdAt: new Date().toISOString() });
               setUserRole('admin'); setUserPlatoons(['HQ', 'C1', 'C2', 'C3', 'C4']);
             } else if (user.email) {
               const preApprovedDoc = await getDoc(doc(db, 'pre_approved_users', user.email.toLowerCase()));
@@ -225,8 +226,8 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const getCommsLink = (type: 'sms' | 'email', lead: any) => {
     const rName = `${profileData.rank} ${profileData.lastName}`.trim() || 'your recruiter';
-    if (type === 'sms') return `sms:${lead.phone}?body=${encodeURIComponent(profileData.smsTemplate.replace(/{{name}}/g, lead.firstName).replace(/{{recruiter}}/g, rName))}`;
-    return `mailto:${lead.email}?subject=Army National Guard&body=${encodeURIComponent(profileData.emailTemplate.replace(/{{name}}/g, lead.firstName).replace(/{{recruiter}}/g, rName))}`;
+    if (type === 'sms') return `sms:${lead.phone}?body=${encodeURIComponent(profileData.smsTemplate.replace(/{{name}}/g, capitalizeFirst(lead.firstName)).replace(/{{recruiter}}/g, rName))}`;
+    return `mailto:${lead.email}?subject=Army National Guard&body=${encodeURIComponent(profileData.emailTemplate.replace(/{{name}}/g, capitalizeFirst(lead.firstName)).replace(/{{recruiter}}/g, rName))}`;
   };
 
   const handleLogout = async () => {
@@ -490,7 +491,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
     const allKeys = Object.keys(dataToExport[0]).filter(k => k !== 'interactions' && k !== 'id' && k !== 'notes');
     const priorityKeys = ['firstName', 'lastName', 'phone', 'email'];
     const headers = [...priorityKeys, ...allKeys.filter(k => !priorityKeys.includes(k))];
-    const csvContent = [headers.join(','), ...dataToExport.map(item => headers.map(h => `"${item[h] || ''}"`).join(','))].join('\n');
+    const csvContent = [headers.join(','), ...dataToExport.map(item => headers.map(h => `"${(item[h] || '').toString().toUpperCase()}"`).join(','))].join('\n');
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
     link.setAttribute('download', `Export_${new Date().toISOString().split('T')[0]}.csv`);
@@ -648,8 +649,8 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
             <div className="hidden sm:flex items-center gap-3 px-4 py-2 bg-army-gold/5 border border-army-gold/20">
               <div className="w-8 h-8 bg-army-gold flex items-center justify-center text-army-black font-black text-xs">{profileData.lastName?.substring(0,2).toUpperCase() || 'RC'}</div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-tighter">{`${profileData.rank} ${profileData.lastName}`.trim() || 'Recruiter'}</span>
-                <span className="text-[8px] font-mono text-army-gold uppercase">{isCommander ? 'Commander' : userRole === 'admin' ? 'Section Chief' : 'Field Agent'}</span>
+                <span className="text-[10px] font-black uppercase tracking-tighter">{`${profileData.lastName}${profileData.firstName ? ', ' + profileData.firstName : ''}`.trim() || 'Recruiter'}</span>
+                <span className="text-[8px] font-mono text-army-gold uppercase">{isCommander ? 'Tiguere' : userRole === 'admin' ? 'Section Chief' : 'Field Agent'}</span>
               </div>
             </div>
             <button onClick={() => setShowProfileModal(true)} className="text-zinc-500 hover:text-army-gold"><Settings className="w-5 h-5" /></button>
@@ -811,7 +812,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
                                   <td className="p-2 font-black">
                                     <div className={stale ? "text-red-400" : "text-white"}>
                                       {stale && <AlertTriangle className="w-3 h-3 inline mr-1 text-red-500" />}
-                                      {lead.firstName} {lead.lastName}
+                                      {toUpper(lead.lastName)}, {toUpper(lead.firstName)}
                                       {due && <span className="bg-army-gold text-black px-1 ml-2 text-[8px] font-black animate-pulse">DUE</span>}
                                     </div>
                                     <div className="text-zinc-500">{lead.email} • {lead.phone}</div>
@@ -861,7 +862,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
                         <td className="p-4 font-black">
                           <div className={stale ? "text-red-400" : "text-white"}>
                             {stale && <AlertTriangle className="w-3 h-3 inline mr-1 text-red-500" />}
-                            {lead.firstName} {lead.lastName}
+                            {toUpper(lead.lastName)}, {toUpper(lead.firstName)}
                             {due && <span className="bg-army-gold text-black px-1 ml-2 text-[8px] font-black animate-pulse">DUE</span>}
                           </div>
                           <div className="text-zinc-500">{lead.email} • {lead.phone}</div>
