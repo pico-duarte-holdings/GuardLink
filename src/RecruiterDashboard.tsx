@@ -28,7 +28,7 @@ import { LeadIntake } from './LeadIntake';
 import { CampaignManager } from './CampaignManager';
 import { SMSCampaignManager } from './SMSCampaignManager';
 import { PlayerAccessManager } from './PlayerAccessManager';
-import { verifyRecaptcha, annotateLogin } from './lib/recaptcha';
+import { verifyRecaptcha, annotateLogin, reportAccountModification } from './lib/recaptcha';
 
 const LEAD_STATUSES = ['New', 'Contacted', 'Appointment', 'ASVAB', 'Physical', 'Waiver', 'Qualified', 'Enlisted'];
 const CHART_COLORS = ['#FFD530', '#00f2ff', '#39ff14', '#a855f7', '#ff0055', '#ffffff'];
@@ -257,7 +257,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   const handleInlineRoleUpdate = async (id: string, newRole: string) => {
-    try { await updateDoc(doc(db, 'users', id), { role: newRole }); } catch (err) { console.error(err); }
+    try { await updateDoc(doc(db, 'users', id), { role: newRole }); reportAccountModification('ROLE_CHANGE'); } catch (err) { console.error(err); }
   };
 
   const handleManualAddLead = async (e: React.MouseEvent | React.FormEvent) => {
@@ -392,6 +392,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
       const url = await getDownloadURL(storageRef);
       setProfileData({ ...profileData, photoURL: url });
       await setDoc(doc(db, 'users', auth.currentUser.uid), { photoURL: url }, { merge: true });
+      reportAccountModification('PROFILE_PHOTO_UPDATE');
     } catch (err: any) { alert("Upload failed: " + err.message); }
     setIsUploadingPhoto(false);
   };
@@ -402,6 +403,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
     try {
       console.log('Saving profile data:', profileData);
       await setDoc(doc(db, 'users', auth.currentUser.uid), { ...profileData, displayName: `${profileData.rank} ${profileData.firstName} ${profileData.lastName}`.trim() }, { merge: true });
+      reportAccountModification('PROFILE_UPDATE');
       setUserSlug(profileData.slug || null);
       setShowProfileModal(false);
     } catch (err: any) { alert("Error: " + err.message); }
@@ -438,6 +440,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
     try {
       const assignedZipCodes = editingMember.assignedZipCodes || [];
       await updateDoc(doc(db, 'users', editingMember.uid), { role: editingMember.role, slug: editingMember.slug, platoons: editingMember.platoons, assignedZipCodes });
+      reportAccountModification('TEAM_MEMBER_UPDATE');
 
       // Auto-transfer unassigned leads whose zip matches the recruiter's assigned zips
       if (assignedZipCodes.length > 0) {

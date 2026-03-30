@@ -96,10 +96,41 @@ export async function annotateLogin(assessmentName: string, legitimate: boolean)
     const annotate = httpsCallable(functions, 'annotateAssessment');
     await annotate({
       assessmentName,
-      legitimateOrFraudulent: legitimate ? 'LEGITIMATE' : 'FRAUDULENT',
+      annotation: legitimate ? 'LEGITIMATE' : 'FRAUDULENT',
     });
   } catch (error) {
     // Non-critical — just log
     console.error('Assessment annotation failed:', error);
+  }
+}
+
+/**
+ * Report an account modification action to Account Defender.
+ * Call after profile updates, role changes, photo uploads, etc.
+ * This satisfies step 3 of the Account Defender integration.
+ */
+export async function reportAccountModification(action: string): Promise<void> {
+  if (!SITE_KEY) return;
+
+  try {
+    await loadRecaptchaScript();
+
+    const token = await new Promise<string>((resolve, reject) => {
+      window.grecaptcha!.enterprise.ready(async () => {
+        try {
+          const t = await window.grecaptcha!.enterprise.execute(SITE_KEY, { action });
+          resolve(t);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+
+    const functions = getFunctions(getApp());
+    const report = httpsCallable(functions, 'reportAccountModification');
+    await report({ token, action, userAgent: navigator.userAgent });
+  } catch (error) {
+    // Non-critical — just log
+    console.error('Account modification report failed:', error);
   }
 }
