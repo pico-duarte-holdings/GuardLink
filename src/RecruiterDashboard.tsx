@@ -25,6 +25,9 @@ import { cn } from './lib/utils';
 import { Bell } from 'lucide-react';
 import { SharedChatbot } from './SharedChatbot';
 import { LeadIntake } from './LeadIntake';
+import { CampaignManager } from './CampaignManager';
+import { SMSCampaignManager } from './SMSCampaignManager';
+import { PlayerAccessManager } from './PlayerAccessManager';
 
 const LEAD_STATUSES = ['New', 'Contacted', 'Appointment', 'ASVAB', 'Physical', 'Waiver', 'Qualified', 'Enlisted'];
 const CHART_COLORS = ['#FFD530', '#00f2ff', '#39ff14', '#a855f7', '#ff0055', '#ffffff'];
@@ -44,7 +47,7 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [team, setTeam] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'funnel' | 'intake' | 'mission' | 'team'>('funnel');
+  const [activeTab, setActiveTab] = useState<'funnel' | 'intake' | 'mission' | 'team' | 'players' | 'campaigns' | 'sms'>('funnel');
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
 
@@ -639,6 +642,20 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
               <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">Team</span>
             </button>
           )}
+          {(userRole === 'admin' || isCommander) && (
+            <button onClick={() => setActiveTab('players')} className={cn("flex flex-col items-center gap-1 p-2 md:px-4 md:py-2 md:flex-row rounded transition-all", activeTab === 'players' ? "text-army-gold bg-army-gold/10" : "text-zinc-400 hover:text-army-gold hover:bg-zinc-900")}>
+              <ShieldAlert className="w-5 h-5 md:w-4 md:h-4" />
+              <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">Players</span>
+            </button>
+          )}
+          <button onClick={() => setActiveTab('campaigns')} className={cn("flex flex-col items-center gap-1 p-2 md:px-4 md:py-2 md:flex-row rounded transition-all", activeTab === 'campaigns' ? "text-army-gold bg-army-gold/10" : "text-zinc-400 hover:text-army-gold hover:bg-zinc-900")}>
+            <Mail className="w-5 h-5 md:w-4 md:h-4" />
+            <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">Email</span>
+          </button>
+          <button onClick={() => setActiveTab('sms')} className={cn("flex flex-col items-center gap-1 p-2 md:px-4 md:py-2 md:flex-row rounded transition-all", activeTab === 'sms' ? "text-army-gold bg-army-gold/10" : "text-zinc-400 hover:text-army-gold hover:bg-zinc-900")}>
+            <MessageSquare className="w-5 h-5 md:w-4 md:h-4" />
+            <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">SMS</span>
+          </button>
 
           {/* New Lead Button */}
           <div className="md:ml-auto">
@@ -710,6 +727,27 @@ export const RecruiterDashboard = ({ onBack }: { onBack: () => void }) => {
         {(activeTab as string) === 'mission' && (
           <div className="hud-border bg-army-black/50 p-4 md:p-6">
             <MissionControl leads={leads} recruiterUid={auth.currentUser?.uid} userRole={userRole} />
+          </div>
+        )}
+
+        {/* Players Tab */}
+        {(activeTab as string) === 'players' && (
+          <div className="hud-border bg-army-black/50 p-4 md:p-6">
+            <PlayerAccessManager profileData={profileData} />
+          </div>
+        )}
+
+        {/* Email Campaigns Tab */}
+        {(activeTab as string) === 'campaigns' && (
+          <div className="hud-border bg-army-black/50 p-4 md:p-6">
+            <CampaignManager profileData={profileData} />
+          </div>
+        )}
+
+        {/* SMS Campaigns Tab */}
+        {(activeTab as string) === 'sms' && (
+          <div className="hud-border bg-army-black/50 p-4 md:p-6">
+            <SMSCampaignManager profileData={profileData} />
           </div>
         )}
 
