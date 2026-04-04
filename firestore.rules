@@ -116,5 +116,17 @@ service cloud.firestore {
       // Users can read their own pre-approval
       allow read: if isAuthenticated() && request.auth.token.email.lower() == email;
     }
+
+    // ── Team Chat ──
+    match /chat_messages/{messageId} {
+      // Any authenticated team member can read messages
+      allow read: if isAuthenticated();
+      // Any authenticated team member can create messages with their own senderId
+      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      // Only admins or the message author can delete
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.senderId == request.auth.uid);
+      // No updates to messages (immutable)
+      allow update: if false;
+    }
   }
 }
