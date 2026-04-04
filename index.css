@@ -1,0 +1,163 @@
+/*
+Copyright 2026 Pico Duarte Holdings LLC. All rights reserved.
+This code, design, and associated assets may not be reproduced, distributed, or transmitted in any form or by any means without prior written permission.
+*/
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0');
+@import "tailwindcss";
+
+@theme {
+  --color-army-black: var(--theme-bg);
+  --color-army-gold: var(--theme-gold);
+  --color-neon-cyan: #00f2ff;
+  --color-neon-green: #39ff14;
+  --color-hot-magenta: #ff0055;
+  --color-electric-purple: #a855f7;
+  --color-fire-orange: #ff8c00;
+  --color-light-camo: #BFB8AB;
+  --color-dark-camo: #333c33;
+  --color-white: var(--theme-text);
+  --color-zinc-900: var(--theme-zinc-900);
+  --color-zinc-800: var(--theme-zinc-800);
+  --color-zinc-600: var(--theme-zinc-600);
+  --color-zinc-500: var(--theme-zinc-500);
+  --color-zinc-400: var(--theme-zinc-400);
+  
+  --font-sans: "Space Grotesk", "Inter", "Arial", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  :root {
+    --theme-bg: #030000;
+    --theme-gold: #FFD530;
+    --theme-text: #ffffff;
+    --theme-zinc-900: #18181b;
+    --theme-zinc-800: #27272a;
+    --theme-zinc-600: #52525b;
+    --theme-zinc-500: #71717a;
+    --theme-zinc-400: #a1a1aa;
+  }
+
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  }
+
+  .light-theme {
+    --theme-bg: #f4f4f5;
+    --theme-gold: #b8860b;
+    --theme-text: #18181b;
+    --theme-zinc-900: #e4e4e7;
+    --theme-zinc-800: #d4d4d8;
+    --theme-zinc-600: #71717a;
+    --theme-zinc-500: #52525b;
+    --theme-zinc-400: #3f3f46;
+  }
+
+  body {
+    @apply bg-army-black text-white font-sans selection:bg-army-gold selection:text-army-black overflow-x-hidden;
+    text-transform: uppercase;
+    background-image: 
+      radial-gradient(circle at 50% 50%, rgba(255, 213, 48, 0.05) 0%, transparent 50%),
+      linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+      linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background-size: 100% 100%, 100% 2px, 3px 100%;
+  }
+}
+
+.hud-border {
+  @apply relative border border-army-gold/30 bg-army-black/40 backdrop-blur-sm;
+  clip-path: polygon(
+    0 10px, 10px 0, 
+    calc(100% - 10px) 0, 100% 10px, 
+    100% calc(100% - 10px), calc(100% - 10px) 100%, 
+    10px 100%, 0 calc(100% - 10px)
+  );
+}
+
+.hud-border::before {
+  content: '';
+  @apply absolute top-0 left-0 w-full h-full pointer-events-none border-t-2 border-l-2 border-army-gold/60 opacity-50;
+  clip-path: polygon(0 0, 20% 0, 20% 2px, 2px 2px, 2px 20%, 0 20%);
+}
+
+.hud-border::after {
+  content: '';
+  @apply absolute bottom-0 right-0 w-full h-full pointer-events-none border-b-2 border-r-2 border-army-gold/60 opacity-50;
+  clip-path: polygon(100% 100%, 80% 100%, 80% calc(100% - 2px), calc(100% - 2px) calc(100% - 2px), calc(100% - 2px) 80%, 100% 80%);
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(255, 213, 48, 0.5), 0 0 20px rgba(255, 213, 48, 0.3);
+}
+
+.glow-border {
+  box-shadow: 0 0 15px rgba(255, 213, 48, 0.2);
+}
+
+.btn-gaming {
+  @apply relative bg-army-gold text-army-black font-black py-4 px-8 uppercase tracking-tighter transition-all hover:scale-105 active:scale-95 overflow-hidden;
+  clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+}
+
+.btn-gaming::after {
+  content: '';
+  @apply absolute top-0 -left-full w-full h-full bg-white/30 skew-x-12 transition-all duration-500;
+}
+
+.btn-gaming:hover::after {
+  @apply left-full;
+}
+
+.scanline {
+  width: 100%;
+  height: 100px;
+  z-index: 100;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(255, 213, 48, 0.05) 50%, rgba(0, 0, 0, 0) 100%);
+  opacity: 0.1;
+  position: absolute;
+  bottom: 100%;
+  animation: scanline 6s linear infinite;
+}
+
+@keyframes scanline {
+  0% { bottom: 100%; }
+  100% { bottom: -100px; }
+}
+
+.animate-spin-slow {
+  animation: spin 8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.preserve-case,
+input[type="email"] {
+  text-transform: none;
+}
+
+/* Gaming glow effects for Command Center */
+.glow-cyan {
+  box-shadow: 0 0 15px rgba(0, 242, 255, 0.2), 0 0 30px rgba(0, 242, 255, 0.1);
+}
+.glow-magenta {
+  box-shadow: 0 0 15px rgba(255, 0, 85, 0.2), 0 0 30px rgba(255, 0, 85, 0.1);
+}
+.glow-green {
+  box-shadow: 0 0 15px rgba(57, 255, 20, 0.2), 0 0 30px rgba(57, 255, 20, 0.1);
+}
+.glow-purple {
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.2), 0 0 30px rgba(168, 85, 247, 0.1);
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
