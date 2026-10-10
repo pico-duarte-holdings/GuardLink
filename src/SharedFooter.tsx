@@ -31,7 +31,7 @@ const DEFAULT_PROFILE = {
   linktree: ''
 };
 
-export const SharedFooter = ({ slugParam }: { slugParam: string }) => {
+export const SharedFooter = ({ slugParam = '' }: { slugParam?: string }) => {
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const slugQuery = slugParam ? `?r=${slugParam}` : '';
   const hasSlug = !!slugParam;
@@ -100,13 +100,16 @@ export const SharedFooter = ({ slugParam }: { slugParam: string }) => {
           <Link to={`/privacy${slugQuery}`} className="hover:text-army-gold transition-colors">Privacy Policy</Link>
         </div>
 
+        <a href="https://picoduarte.org" className="text-army-gold text-[10px] font-mono uppercase tracking-[0.2em] hover:underline">A Pico Duarte Holdings LLC company</a>
+
         {/* DoD Disclaimer */}
         <div className="max-w-3xl text-zinc-600 text-[9px] font-mono leading-relaxed px-4">
           <p className="opacity-60">GuardLink is a privately operated informational platform owned by Pico Duarte Holdings LLC and operated by GuardLink Technologies LLC. It is not an official website of the United States Government, the Department of Defense (also known as the Department of War), the Department of the Army, the National Guard Bureau, or the Florida Department of Military Affairs. The views, information, and content presented on this site are those of the site operator and do not represent the official position of any U.S. Government agency or military organization. Use of military rank, job titles, and photographs in uniform does not imply endorsement by the Department of the Army or the Department of Defense. All information is provided for general informational and recruiting support purposes only.</p>
         </div>
 
         <div className="text-zinc-600 text-[10px] font-mono uppercase tracking-[0.2em] leading-loose space-y-2">
-          <p className="opacity-50">&copy; 2026 Pico Duarte Holdings LLC. All rights reserved. Operated by GuardLink Technologies LLC.</p>
+          <p className="opacity-50">&copy; 2026 Pico Duarte Holdings LLC. All rights reserved.</p>
+          <p className="opacity-40">GuardLink is operated by GuardLink Technologies LLC.</p>
         </div>
       </div>
     </footer>
